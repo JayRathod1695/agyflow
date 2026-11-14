@@ -13,3 +13,5 @@ venv/
 .flow/worktrees/
 .flow/locks/
 .DS_Store
+ACTIVITY.md
+CONTEXT.md
