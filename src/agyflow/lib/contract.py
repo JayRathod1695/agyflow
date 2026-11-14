@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import threading
 from typing import Any
 import yaml
 
@@ -78,7 +79,7 @@ def parse_cli_args(args: list[str] | None = None) -> ContractArgs:
 def atomic_write_json(file_path: Path, data: Any) -> None:
     """Write data to JSON file atomically via fsync and os.replace."""
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = file_path.parent / f".tmp_{file_path.name}_{os.getpid()}"
+    tmp_path = file_path.parent / f".tmp_{file_path.name}_{os.getpid()}_{threading.get_ident()}"
     with open(tmp_path, "w", encoding="utf-8") as f:
         f.write(canonical_json(data))
         f.flush()

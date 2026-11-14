@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
@@ -175,14 +176,23 @@ def exec_seq(nodes: list[PipelineNode], scope: Scope, launcher: Launcher) -> Non
         elif node.kind == "foreach":
             if node.data.get("when") and not eval_expr(node.data["when"], scope): continue
             items = store.resolve_items(node.data.get("items", []), scope.resolve_ref_path, scope.resolve_ref_value)[: int(node.data.get("limit", 999999))]
-            item_statuses = []
-            for item in items:
+            max_p = int(substitute_variables(node.data.get("max_parallel", 1), scope.lookup_dict()) or 1)
+            is_safe = bool(scope.project_cfg.get("capabilities", {}).get("parallel_safe", False))
+            workers = max_p if (max_p > 1 and is_safe) else 1
+
+            def _run_one(it: Any) -> dict[str, str]:
                 try:
-                    exec_seq(node.steps, scope.child(item=str(item), as_var=node.data.get("as", "item")), launcher)
-                    item_statuses.append({"id": str(item), "status": "ok"})
+                    exec_seq(node.steps, scope.child(item=str(it), as_var=node.data.get("as", "item")), launcher)
+                    return {"id": str(it), "status": "ok"}
                 except StepFailed:
-                    item_statuses.append({"id": str(item), "status": "failed"})
                     if node.data.get("item_fail") == "stop": raise
+                    return {"id": str(it), "status": "failed"}
+
+            if workers > 1:
+                with ThreadPoolExecutor(max_workers=workers) as pool: item_statuses = list(pool.map(_run_one, items))
+            else:
+                item_statuses = [_run_one(it) for it in items]
+
             idx_dir = scope.run_dir / "steps" / node.id / "out"; idx_dir.mkdir(parents=True, exist_ok=True)
             (idx_dir / "index.json").write_text(json.dumps({"payload": {"items": item_statuses}}))
             scope.exports[f"{node.id}.index"] = idx_dir / "index.json"

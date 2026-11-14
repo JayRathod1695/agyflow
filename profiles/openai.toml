@@ -1,0 +1,36 @@
+[profile]
+name = "openai"
+adapter = "openai"
+model = "gpt-4o-mini"
+env_allow = ["OPENAI_API_KEY", "OPENAI_BASE_URL"]
+extra_args = []
+
+[defaults]
+effort = "medium"
+timeout_s = 900
+tool_call_cap = 25
+
+[roles.context_builder]
+effort = "medium"
+tool_call_cap = 30
+
+[roles.analyst]
+effort = "high"
+tool_call_cap = 25
+
+[roles.planner]
+effort = "high"
+tool_call_cap = 15
+
+[roles.researcher]
+effort = "medium"
+tool_call_cap = 20
+
+[roles.actor]
+effort = "medium"
+tool_call_cap = 40
+timeout_s = 1500
+
+[roles.reviewer]
+effort = "high"
+tool_call_cap = 20

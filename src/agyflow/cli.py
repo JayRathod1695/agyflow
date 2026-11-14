@@ -1,4 +1,4 @@
-"""agyflow CLI entry point for workflow management, DAG runs, gates, and diagnostics."""
+"""agyflow CLI entry point for workflow management, DAG runs, gates, gc, and diagnostics."""
 
 from __future__ import annotations
 
@@ -32,17 +32,20 @@ def _latest_run_id(flow_dir: Path) -> str:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    fd = _find_flow_dir(Path(args.repo) if args.repo else None)
+    fd = _find_flow_dir(Path(args.repo) if getattr(args, "repo", None) else None)
     for sub in ("locks", "runs", "worktrees"): (fd / sub).mkdir(parents=True, exist_ok=True)
     pf, df = fd / "project.toml", fd / "decisions.md"
-    if not pf.exists(): pf.write_text('[project]\nname = "demo"\n\n[limits]\nmax_rounds = 3\n\n[budget]\nminutes = 60\nagent_calls = 30\n')
+    tmpl = getattr(args, "template", "generic") or "generic"
+    if not pf.exists():
+        extra = '\nsmoke_cmd = "pytest tests/smoke"\nmetric_cmd = "python3 eval.py"\n' if tmpl == "ml" else ""
+        pf.write_text(f'[project]\nname = "demo"\ntemplate = "{tmpl}"{extra}\n\n[limits]\nmax_rounds = 3\n\n[budget]\nminutes = 60\nagent_calls = 30\n')
     if not df.exists(): df.write_text("# Decisions\n")
     gi = fd.parent / ".gitignore"
     if gi.is_file():
         t = gi.read_text(encoding="utf-8")
         adds = [l for l in (".flow/runs/", ".flow/worktrees/", ".flow/locks/") if l not in t]
         if adds: gi.write_text(t.rstrip() + "\n" + "\n".join(adds) + "\n")
-    print(f"Initialized agyflow at {fd}"); return 0
+    print(f"Initialized agyflow ({tmpl}) at {fd}"); return 0
 
 
 def _run_engine(run_dir: Path, flow_dir: Path, tree: Any, state: RunState, proj_cfg: dict, launcher_name: str, wait_gate: bool) -> int:
@@ -53,8 +56,7 @@ def _run_engine(run_dir: Path, flow_dir: Path, tree: Any, state: RunState, proj_
             exec_seq(tree.steps, scope, launcher)
             state.status = "done"; save_state(run_dir, state); print(f"Run {state.run_id} done."); return 0
         except Pause as p:
-            state.status = p.kind; save_state(run_dir, state)
-            gate_name = p.xid.split("/")[-1]
+            state.status = p.kind; save_state(run_dir, state); gate_name = p.xid.split("/")[-1]
             print(f"Run paused ({p.kind}) at {p.xid}. Review: {run_dir / 'gates' / f'{gate_name}.review.md'}")
             if wait_gate and p.kind == "paused_gate":
                 app_path = run_dir / "gates" / f"{gate_name}.approval.json"
@@ -63,13 +65,12 @@ def _run_engine(run_dir: Path, flow_dir: Path, tree: Any, state: RunState, proj_
                 print(f"Gate {gate_name} approved. Resuming..."); continue
             return 30
         except (Stop, BudgetExceededError) as s:
-            is_budget = isinstance(s, BudgetExceededError) or (isinstance(s, Stop) and getattr(s, "kind", "") == "stopped_budget")
-            state.status = "stopped_budget" if is_budget else "failed"
-            save_state(run_dir, state); print(f"Run {state.run_id} {state.status}: {s}")
+            is_b = isinstance(s, BudgetExceededError) or (isinstance(s, Stop) and getattr(s, "kind", "") == "stopped_budget")
+            state.status = "stopped_budget" if is_b else "failed"; save_state(run_dir, state); print(f"Run {state.run_id} {state.status}: {s}")
             for node in tree.finally_:
                 try: exec_seq([node], scope, launcher)
                 except Exception: pass
-            return 2 if is_budget else 1
+            return 2 if is_b else 1
         except StepFailed as s:
             state.status = "failed"; save_state(run_dir, state); print(f"Run {state.run_id} failed: {s}")
             for node in tree.finally_:
@@ -81,8 +82,7 @@ def _run_engine(run_dir: Path, flow_dir: Path, tree: Any, state: RunState, proj_
 def cmd_run(args: argparse.Namespace) -> int:
     fd = _find_flow_dir()
     rid = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    rdir = fd / "runs" / rid; rdir.mkdir(parents=True, exist_ok=True)
-    handle = acquire(fd, rid)
+    rdir = fd / "runs" / rid; rdir.mkdir(parents=True, exist_ok=True); handle = acquire(fd, rid)
     try:
         pcfg = tomllib.loads((fd / "project.toml").read_text(encoding="utf-8")) if (fd / "project.toml").is_file() else {}
         tree = load_pipeline(args.pipeline, pcfg, dict(kv.split("=", 1) for kv in args.set) if args.set else {}, fd.parent)
@@ -94,9 +94,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_resume(args: argparse.Namespace) -> int:
-    fd = _find_flow_dir()
-    rid = args.run_id or _latest_run_id(fd); rdir = fd / "runs" / rid
-    handle = acquire(fd, rid)
+    fd = _find_flow_dir(); rid = args.run_id or _latest_run_id(fd); rdir = fd / "runs" / rid; handle = acquire(fd, rid)
     try:
         st = load_state(rdir)
         pcfg = tomllib.loads((fd / "project.toml").read_text(encoding="utf-8")) if (fd / "project.toml").is_file() else {}
@@ -107,13 +105,9 @@ def cmd_resume(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    fd = _find_flow_dir(); rid = args.run_id or _latest_run_id(fd)
-    st = load_state(fd / "runs" / rid)
+    fd = _find_flow_dir(); rid = args.run_id or _latest_run_id(fd); st = load_state(fd / "runs" / rid)
     print(f"Run ID:   {st.run_id}\nPipeline: {st.pipeline}\nStatus:   {st.status}")
-    if st.pending.get("gate"):
-        g = st.pending["gate"]
-        print(f"Pending Gate: {g}\nReview Path:  {fd / 'runs' / rid / 'gates' / f'{g}.review.md'}")
-    print(f"Counters: agent_calls={st.counters.get('agent_calls',0)}, active_sec={st.counters.get('active_seconds',0)}")
+    if st.pending.get("gate"): print(f"Pending Gate: {st.pending['gate']}")
     for xid, rec in st.steps.items(): print(f"  [{rec.status.upper()}] {xid} (attempt {rec.attempt})")
     return 0
 
@@ -145,25 +139,35 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         sdir = rdir / "steps" / xid
         if (sdir / "out").exists(): shutil.rmtree(sdir / "out")
         if xid in st.steps: del st.steps[xid]
-        st.status = "running"; save_state(rdir, st)
-        print(f"Resolved step {xid} (--discard): cleared for re-run")
+        st.status = "running"; save_state(rdir, st); print(f"Resolved step {xid} (--discard)")
     elif args.accept:
-        st.mark_committed(xid, "synthetic:accepted")
-        st.status = "running"; save_state(rdir, st)
-        print(f"Resolved step {xid} (--accept): marked committed")
+        st.mark_committed(xid, "synthetic:accepted"); st.status = "running"; save_state(rdir, st); print(f"Resolved step {xid} (--accept)")
     return 0
 
 
 def cmd_repair(args: argparse.Namespace) -> int:
-    fd = _find_flow_dir(); rid = args.run_id or _latest_run_id(fd)
-    st = repair_state(fd / "runs" / rid)
+    fd = _find_flow_dir(); rid = args.run_id or _latest_run_id(fd); st = repair_state(fd / "runs" / rid)
     print(f"Repaired state for run {rid}: status={st.status}, {len(st.steps)} steps"); return 0
+
+
+def cmd_gc(args: argparse.Namespace) -> int:
+    fd = _find_flow_dir(); count = 0
+    allowed = (fd / "runs").resolve(), (fd / "worktrees").resolve()
+    for base in allowed:
+        if not base.is_dir(): continue
+        for item in base.iterdir():
+            res = item.resolve()
+            if not any(res == a or a in res.parents for a in allowed):
+                raise ValueError(f"GC path escape violation blocked: {item}")
+            if item.is_dir() and not (fd / "locks" / f"{item.name}.lock").is_file():
+                shutil.rmtree(item, ignore_errors=True); count += 1
+    print(f"Cleaned {count} items under runs/ and worktrees/"); return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="agyflow", description="agyflow DAG Workflow Engine")
     sub = p.add_subparsers(dest="cmd", required=True)
-    p_init = sub.add_parser("init"); p_init.add_argument("--repo", default=".")
+    p_init = sub.add_parser("init"); p_init.add_argument("--repo", default="."); p_init.add_argument("--template", choices=["ml", "generic"], default="generic")
     p_run = sub.add_parser("run"); p_run.add_argument("pipeline"); p_run.add_argument("--set", action="append")
     p_run.add_argument("--wait-gate", action="store_true"); p_run.add_argument("--launcher", default="subprocess")
     p_res = sub.add_parser("resume"); p_res.add_argument("run_id", nargs="?"); p_res.add_argument("--wait-gate", action="store_true")
@@ -172,9 +176,10 @@ def main(argv: list[str] | None = None) -> int:
     p_rej = sub.add_parser("reject"); p_rej.add_argument("gate"); p_rej.add_argument("--note")
     p_rsl = sub.add_parser("resolve"); p_rsl.add_argument("step"); p_rsl.add_argument("run_id", nargs="?", default=""); p_rsl.add_argument("--discard", action="store_true"); p_rsl.add_argument("--accept", action="store_true"); p_rsl.add_argument("--run-id", dest="opt_run_id", default="")
     p_rep = sub.add_parser("repair"); p_rep.add_argument("run_id", nargs="?")
+    p_gc = sub.add_parser("gc")
 
     args = p.parse_args(argv)
-    disp = {"init": cmd_init, "run": cmd_run, "resume": cmd_resume, "status": cmd_status, "approve": cmd_approve, "reject": cmd_reject, "resolve": cmd_resolve, "repair": cmd_repair}
+    disp = {"init": cmd_init, "run": cmd_run, "resume": cmd_resume, "status": cmd_status, "approve": cmd_approve, "reject": cmd_reject, "resolve": cmd_resolve, "repair": cmd_repair, "gc": cmd_gc}
     return disp[args.cmd](args)
 
 
