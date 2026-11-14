@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResearchPayload",
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "unknown_id": { "type": "string" },
+          "answer_summary": { "type": "string", "maxLength": 400 },
+          "confidence": { "enum": ["low", "med", "high"] },
+          "contradicts_plan": { "type": "boolean" },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": { "type": "string" },
+                "title": { "type": "string", "maxLength": 120 },
+                "supports": { "type": "string", "maxLength": 160 },
+                "opened": { "type": "boolean" }
+              },
+              "required": ["url", "title", "supports", "opened"],
+              "additionalProperties": false
+            },
+            "maxItems": 3
+          }
+        },
+        "required": ["unknown_id", "answer_summary", "confidence", "contradicts_plan", "sources"],
+        "additionalProperties": false
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "unknown_id": { "type": "string" },
+          "reason": { "type": "string", "maxLength": 120 }
+        },
+        "required": ["unknown_id", "reason"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["items", "unresolved"],
+  "additionalProperties": false
+}

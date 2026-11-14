@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApprovalPayload",
+  "type": "object",
+  "properties": {
+    "gate": { "type": "string" },
+    "decision": { "enum": ["approve", "reject"] },
+    "subject_hash": { "type": "string" },
+    "picks": { "type": "array", "items": { "type": "string" } },
+    "accept": { "type": "array", "items": { "type": "string" } },
+    "reject": { "type": "array", "items": { "type": "string" } },
+    "note": { "type": "string" },
+    "decided_at": { "type": "string" }
+  },
+  "required": [
+    "gate",
+    "decision",
+    "subject_hash",
+    "picks",
+    "accept",
+    "reject",
+    "note",
+    "decided_at"
+  ],
+  "additionalProperties": false
+}

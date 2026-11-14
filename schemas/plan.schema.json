@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlanPayload",
+  "type": "object",
+  "properties": {
+    "revision": { "type": "integer", "minimum": 1 },
+    "goal": { "type": "string" },
+    "approaches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-D]$" },
+          "title": { "type": "string", "maxLength": 80 },
+          "differs_on": {
+            "enum": ["algorithm", "loss", "data", "architecture", "hyperparams", "infrastructure", "other"]
+          },
+          "differs_detail": { "type": "string", "maxLength": 200 },
+          "summary": { "type": "string", "maxLength": 400 },
+          "steps": {
+            "type": "array",
+            "items": { "type": "string", "maxLength": 200 },
+            "minItems": 1,
+            "maxItems": 12
+          },
+          "files_to_change": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 20
+          },
+          "max_files_changed": { "type": "integer", "minimum": 1 },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "risk": { "type": "string", "maxLength": 160 },
+                "mitigation": { "type": "string", "maxLength": 160 }
+              },
+              "required": ["risk", "mitigation"],
+              "additionalProperties": false
+            },
+            "maxItems": 6
+          },
+          "success_criteria": {
+            "type": "array",
+            "items": { "type": "string", "maxLength": 200 },
+            "minItems": 1,
+            "maxItems": 6
+          },
+          "addresses": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "effort": { "enum": ["S", "M", "L"] }
+        },
+        "required": [
+          "id",
+          "title",
+          "differs_on",
+          "differs_detail",
+          "summary",
+          "steps",
+          "files_to_change",
+          "max_files_changed",
+          "risks",
+          "success_criteria",
+          "addresses",
+          "effort"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 4
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^U-[0-9]+$" },
+          "question": { "type": "string", "maxLength": 240 },
+          "why_it_matters": { "type": "string", "maxLength": 200 },
+          "approach_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["id", "question", "why_it_matters", "approach_ids"],
+        "additionalProperties": false
+      },
+      "maxItems": 6
+    },
+    "not_doing": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 160 }
+    }
+  },
+  "required": ["revision", "goal", "approaches", "unknowns", "not_doing"],
+  "additionalProperties": false
+}
