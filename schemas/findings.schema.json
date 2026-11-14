@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FindingsPayload",
+  "type": "object",
+  "properties": {
+    "round": { "type": "integer", "minimum": 1 },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^F-[0-9]{3}$" },
+          "severity": { "enum": ["HIGH", "MED", "LOW"] },
+          "category": { "enum": ["logic", "math", "architecture", "code", "data", "performance", "other"] },
+          "claim": { "type": "string", "maxLength": 300 },
+          "claim_key": { "type": "string", "maxLength": 80 },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "file": { "type": "string" },
+              "line": { "type": "integer", "minimum": 1 },
+              "end_line": { "type": "integer", "minimum": 1 },
+              "quote": { "type": "string", "maxLength": 240 }
+            },
+            "required": ["file", "line", "quote"],
+            "additionalProperties": false
+          },
+          "repro": {
+            "type": "object",
+            "properties": {
+              "kind": { "enum": ["python_snippet", "pytest_node", "reasoning"] },
+              "code": { "type": "string", "maxLength": 4000 },
+              "node": { "type": "string" },
+              "argument": { "type": "string", "maxLength": 1500 }
+            },
+            "required": ["kind"],
+            "additionalProperties": false,
+            "allOf": [
+              { "if": { "properties": { "kind": { "const": "python_snippet" } } }, "then": { "required": ["code"] } },
+              { "if": { "properties": { "kind": { "const": "pytest_node" } } }, "then": { "required": ["node"] } },
+              { "if": { "properties": { "kind": { "const": "reasoning" } } }, "then": { "required": ["argument"] } }
+            ]
+          },
+          "expected_if_true": { "type": "string", "maxLength": 240 },
+          "confidence": { "enum": ["low", "med", "high"] }
+        },
+        "required": [
+          "id",
+          "severity",
+          "category",
+          "claim",
+          "claim_key",
+          "evidence",
+          "repro",
+          "expected_if_true",
+          "confidence"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 12
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "files_read": { "type": "array", "items": { "type": "string" } },
+        "files_skipped": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["files_read", "files_skipped", "notes"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["round", "findings", "coverage"],
+  "additionalProperties": false
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SnapshotPayload",
+  "type": "object",
+  "properties": {
+    "repo_path": { "type": "string" },
+    "head": { "type": "string", "minLength": 7 },
+    "branch": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+    "dirty": { "type": "boolean" },
+    "dirty_diff_sha256": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+    "tracked_files": { "type": "integer", "minimum": 0 },
+    "base_tree": { "type": "string" },
+    "created_at": { "type": "string" }
+  },
+  "required": [
+    "repo_path",
+    "head",
+    "branch",
+    "dirty",
+    "dirty_diff_sha256",
+    "tracked_files",
+    "base_tree",
+    "created_at"
+  ],
+  "additionalProperties": false
+}

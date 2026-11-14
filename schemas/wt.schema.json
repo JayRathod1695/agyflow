@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorktreePayload",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "path": { "type": "string" },
+    "base_commit": { "type": "string" },
+    "branch": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+    "readonly": { "type": "boolean" },
+    "dirty_applied": { "type": "boolean" }
+  },
+  "required": ["name", "path", "base_commit", "branch", "readonly", "dirty_applied"],
+  "additionalProperties": false
+}

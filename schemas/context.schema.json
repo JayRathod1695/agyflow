@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContextPayload",
+  "type": "object",
+  "properties": {
+    "built_at_commit": { "type": "string" },
+    "repo_summary": { "type": "string", "maxLength": 600 },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "purpose": { "type": "string", "maxLength": 160 },
+          "key_symbols": { "type": "array", "items": { "type": "string" }, "maxItems": 12 },
+          "depends_on": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["path", "purpose", "key_symbols", "depends_on"],
+        "additionalProperties": false
+      }
+    },
+    "data_flow": { "type": "array", "items": { "type": "string", "maxLength": 200 }, "maxItems": 30 },
+    "key_equations_or_invariants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "where": { "type": "string" },
+          "statement": { "type": "string", "maxLength": 240 }
+        },
+        "required": ["where", "statement"],
+        "additionalProperties": false
+      }
+    },
+    "entry_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cmd": { "type": "string" },
+          "purpose": { "type": "string", "maxLength": 120 }
+        },
+        "required": ["cmd", "purpose"],
+        "additionalProperties": false
+      }
+    },
+    "test_layout": {
+      "type": "object",
+      "properties": {
+        "runner": { "type": "string" },
+        "paths": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string", "maxLength": 240 }
+      },
+      "required": ["runner", "paths", "notes"],
+      "additionalProperties": false
+    },
+    "known_risks": { "type": "array", "items": { "type": "string", "maxLength": 200 }, "maxItems": 15 },
+    "glossary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "term": { "type": "string" },
+          "meaning": { "type": "string", "maxLength": 160 }
+        },
+        "required": ["term", "meaning"],
+        "additionalProperties": false
+      },
+      "maxItems": 30
+    }
+  },
+  "required": [
+    "built_at_commit",
+    "repo_summary",
+    "modules",
+    "data_flow",
+    "key_equations_or_invariants",
+    "entry_points",
+    "test_layout",
+    "known_risks",
+    "glossary"
+  ],
+  "additionalProperties": false
+}

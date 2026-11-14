@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VerifiedPayload",
+  "type": "object",
+  "properties": {
+    "round": { "type": "integer", "minimum": 1 },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "fingerprint": { "type": "string" },
+          "severity": { "enum": ["HIGH", "MED", "LOW"] },
+          "category": { "type": "string" },
+          "claim": { "type": "string" },
+          "claim_key": { "type": "string" },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "file": { "type": "string" },
+              "line": { "type": "integer", "minimum": 1 },
+              "end_line": { "type": "integer", "minimum": 1 },
+              "quote": { "type": "string" }
+            },
+            "required": ["file", "line", "quote"],
+            "additionalProperties": false
+          },
+          "status": { "enum": ["CONFIRMED", "DROPPED", "UNRUNNABLE", "ERROR"] },
+          "repro_result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "runs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "exit_code": { "anyOf": [{ "type": "integer" }, { "type": "null" }] },
+                        "evidence_line": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+                        "timed_out": { "type": "boolean" },
+                        "duration_s": { "type": "number" }
+                      },
+                      "required": ["exit_code", "evidence_line", "timed_out", "duration_s"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "stdout_tail": { "type": "string" }
+                },
+                "required": ["runs", "stdout_tail"],
+                "additionalProperties": false
+              },
+              { "type": "null" }
+            ]
+          },
+          "argument": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "first_round": { "type": "integer", "minimum": 1 },
+          "last_round": { "type": "integer", "minimum": 1 }
+        },
+        "required": [
+          "id",
+          "fingerprint",
+          "severity",
+          "category",
+          "claim",
+          "claim_key",
+          "evidence",
+          "status",
+          "repro_result",
+          "argument",
+          "first_round",
+          "last_round"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["round", "items"],
+  "additionalProperties": false
+}

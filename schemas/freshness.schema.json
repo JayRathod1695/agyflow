@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FreshnessPayload",
+  "type": "object",
+  "properties": {
+    "fresh": { "type": "boolean" },
+    "reason": { "type": "string" },
+    "context_commit": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+    "head": { "type": "string" },
+    "commits_behind": { "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] }
+  },
+  "required": ["fresh", "reason", "context_commit", "head", "commits_behind"],
+  "additionalProperties": false
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ArtifactEnvelope",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer"
+    },
+    "produced_by": {
+      "type": "object",
+      "properties": {
+        "step": { "type": "string" },
+        "block": { "type": "string" },
+        "block_version": { "type": "string" },
+        "profile": { "type": "string" },
+        "prompt_version": { "type": "string" }
+      },
+      "required": ["step", "block", "block_version", "profile", "prompt_version"],
+      "additionalProperties": false
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "inputs_hash": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "required": ["schema", "schema_version", "produced_by", "created_at", "inputs_hash", "payload"],
+  "additionalProperties": false
+}

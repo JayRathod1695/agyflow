@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PublishResultPayload",
+  "type": "object",
+  "properties": {
+    "context_written": { "type": "boolean" },
+    "decisions_appended": { "type": "integer", "minimum": 0 }
+  },
+  "required": ["context_written", "decisions_appended"],
+  "additionalProperties": false
+}
