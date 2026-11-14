@@ -133,7 +133,7 @@ def check_adoptable(run_dir: Path | str, xid: str, expected_ih: str) -> tuple[bo
         if status_file.is_file():
             try:
                 st = json.loads(status_file.read_text(encoding="utf-8"))
-                if st.get("complete") is True:
+                if st.get("complete") is True and st.get("status") == "ok":
                     return True, final_out
             except Exception:
                 pass
@@ -145,7 +145,7 @@ def check_adoptable(run_dir: Path | str, xid: str, expected_ih: str) -> tuple[bo
             if status_file.is_file():
                 try:
                     st = json.loads(status_file.read_text(encoding="utf-8"))
-                    if st.get("complete") is True:
+                    if st.get("complete") is True and st.get("status") == "ok":
                         return True, att_dir / "out"
                 except Exception:
                     pass

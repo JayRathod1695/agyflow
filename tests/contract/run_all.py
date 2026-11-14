@@ -1,4 +1,4 @@
-"""Contract test runner for all 16 agyflow blocks (M1 + M2).
+"""Contract test runner for all 19 agyflow blocks (M1 + M2 + M3).
 
 Validates that each block adheres strictly to the Section 4 Unix contract:
   --in <dir> --out <dir> --cfg <json>
@@ -17,6 +17,7 @@ from contract_harness import (
     ALL_BLOCK_NAMES,
     M1_BLOCK_NAMES,
     M2_BLOCK_NAMES,
+    M3_BLOCK_NAMES,
     find_block_entrypoint,
     check_block_help_contract,
     check_missing_args_contract,

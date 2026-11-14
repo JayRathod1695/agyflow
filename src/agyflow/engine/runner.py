@@ -19,15 +19,11 @@ from agyflow.lib.schema import validate_or_raise
 
 class Pause(Exception):
     def __init__(self, kind: str, xid: str = "", reason: str = "") -> None:
-        super().__init__(f"Pause({kind}, {xid}, {reason})")
-        self.kind, self.xid, self.reason = kind, xid, reason
-
+        super().__init__(f"Pause({kind}, {xid}, {reason})"); self.kind, self.xid, self.reason = kind, xid, reason
 
 class Stop(Exception):
     def __init__(self, kind: str, reason: str = "") -> None:
-        super().__init__(f"Stop({kind}, {reason})")
-        self.kind, self.reason = kind, reason
-
+        super().__init__(f"Stop({kind}, {reason})"); self.kind, self.reason = kind, reason
 
 class StepFailed(Exception): pass
 
@@ -47,11 +43,9 @@ class Scope:
     exports: dict[str, Any] = field(default_factory=dict)
 
     def child(self, loop: str = "", iter: int = 0, item: str = "") -> Scope:
-        return Scope(
-            self.run_dir, self.state, self.project_cfg, self.params,
-            loop or self.loop_id, iter or self.loop_iter, item or self.item_id,
-            bool(item) or self.in_foreach, self.exports,
-        )
+        return Scope(self.run_dir, self.state, self.project_cfg, self.params,
+                     loop or self.loop_id, iter or self.loop_iter, item or self.item_id,
+                     bool(item) or self.in_foreach, self.exports)
 
     def exec_id(self, step_id: str) -> str:
         pfx = f"{self.loop_id}.{self.loop_iter}/" if self.loop_id else ""
@@ -59,8 +53,7 @@ class Scope:
 
     def lookup_dict(self) -> dict[str, Any]:
         d = {k: v for sec in ("project", "limits", "budget") for k, v in self.project_cfg.get(sec, {}).items()}
-        d.update({f"params.{k}": v for k, v in self.params.items()})
-        d.update(self.params)
+        for k, v in self.params.items(): d[f"params.{k}"] = d[k] = v
         d["loop.iter"], d["item.id"] = self.loop_iter, self.item_id
         return d
 
@@ -94,17 +87,16 @@ class Scope:
         if not p or not p.is_file(): return None
         try:
             curr = json.loads(p.read_text(encoding="utf-8")).get("payload", {})
-            for f in [x for x in field.split(".") if x]:
-                curr = curr.get(f) if isinstance(curr, dict) else None
+            for f in [x for x in field.split(".") if x]: curr = curr.get(f) if isinstance(curr, dict) else None
             return curr
         except Exception: return None
 
 
 def interpret_attempt(res: Any, att: store.AttemptDirs, manifest: registry.BlockManifest) -> dict[str, Any]:
     if res.timed_out: return {"ok": False, "retryable": True, "code": "E_TIMEOUT", "reason": "Timed out"}
-    status_file = att.out_dir / "_status.json"
-    if not status_file.is_file(): return {"ok": False, "retryable": False, "code": "E_CONTRACT", "reason": "Missing _status.json"}
-    try: sdata = json.loads(status_file.read_text(encoding="utf-8"))
+    sf = att.out_dir / "_status.json"
+    if not sf.is_file(): return {"ok": False, "retryable": False, "code": "E_CONTRACT", "reason": "Missing _status.json"}
+    try: sdata = json.loads(sf.read_text(encoding="utf-8"))
     except Exception: return {"ok": False, "retryable": False, "code": "E_CONTRACT", "reason": "Malformed _status.json"}
     if res.exit_code == 30 or sdata.get("status") == "needs_human":
         return {"ok": False, "needs_human": True, "code": sdata.get("code", "E_NEEDS_HUMAN"), "reason": sdata.get("reason", "")}
@@ -113,9 +105,9 @@ def interpret_attempt(res: Any, att: store.AttemptDirs, manifest: registry.Block
         return {"ok": False, "retryable": policy.is_retriable_code(code), "code": code, "reason": sdata.get("reason", "")}
     for out_name, out_spec in manifest.outputs.items():
         if not out_spec.get("optional", False):
-            out_file = att.out_dir / f"{out_name}.json"
-            if not out_file.is_file(): return {"ok": False, "retryable": True, "code": "E_SCHEMA", "reason": f"Missing {out_name}"}
-            try: validate_or_raise(json.loads(out_file.read_text(encoding="utf-8")).get("payload", {}), out_spec.get("schema", out_name))
+            of = att.out_dir / f"{out_name}.json"
+            if not of.is_file(): return {"ok": False, "retryable": True, "code": "E_SCHEMA", "reason": f"Missing {out_name}"}
+            try: validate_or_raise(json.loads(of.read_text(encoding="utf-8")).get("payload", {}), out_spec.get("schema", out_name))
             except Exception as e: return {"ok": False, "retryable": True, "code": "E_SCHEMA", "reason": str(e)}
     return {"ok": True, "metrics": sdata.get("metrics", {})}
 
@@ -144,14 +136,15 @@ def exec_step(step_node: PipelineNode, scope: Scope, launcher: Launcher) -> None
         scope.state.mark_committed(xid, ih); return
 
     lvl = policy.effective_level(step_node.data.get("side_effects"), block.side_effects)
-    if rec and rec.status == "started" and not policy.rerun_allowed(lvl, block):
-        raise Pause("needs_human", xid, "Interrupted step with non-idempotent side effects")
+    if rec and rec.status == "started" and not policy.rerun_allowed(lvl, block): raise Pause("needs_human", xid, "Interrupted step")
 
     retry_info: dict[str, Any] | None = None
     for attempt in range(1, policy.max_attempts(step_node.data.get("retry")) + 1):
         scope.state.mark_started(xid, attempt, ih); save_state(scope.run_dir, scope.state)
         att = store.new_attempt(scope.run_dir, xid, attempt)
         store.stage_inputs(att.in_dir, inputs, retry_info)
+        app_file = scope.run_dir / "gates" / f"{step_node.id}.approval.json"
+        if app_file.is_file(): shutil.copy2(app_file, att.in_dir / "_gate_response.json")
         store.write_cfg(att.cfg_file, cfg | {"_ctx": {"run_id": scope.state.run_id, "step": xid, "attempt": attempt}})
         res = launcher.run(list(block.command) + ["--in", str(att.in_dir), "--out", str(att.out_dir), "--cfg", str(att.cfg_file)],
                            cwd=block.dir, stdout_log=att.stdout_log, stderr_log=att.stderr_log)
@@ -160,12 +153,19 @@ def exec_step(step_node: PipelineNode, scope: Scope, launcher: Launcher) -> None
 
         if v.get("needs_human"):
             gate_dir = scope.run_dir / "gates"; gate_dir.mkdir(parents=True, exist_ok=True)
+            sub_hash = ""
             for gf in ("request.json", "review.md"):
-                if (att.out_dir / gf).is_file(): shutil.copy2(att.out_dir / gf, gate_dir / f"{step_node.id}.{gf}")
+                if (sf := att.out_dir / gf).is_file():
+                    shutil.copy2(sf, gate_dir / f"{step_node.id}.{gf}")
+                    if gf == "request.json":
+                        try: sub_hash = json.loads(sf.read_text(encoding="utf-8")).get("payload", {}).get("subject_hash", "")
+                        except Exception: pass
+            scope.state.pending = {"gate": step_node.id, "subject_hash": sub_hash}
             raise Pause("paused_gate", xid, v.get("reason", ""))
         if v["ok"]:
             store.commit_attempt(scope.run_dir, xid, att)
             scope.state.mark_committed(xid, ih); append_event(scope.run_dir, "committed", step=xid, attempt=attempt)
+            if scope.state.pending.get("gate") == step_node.id: scope.state.pending = {"gate": None, "subject_hash": None}
             return
         if v.get("retryable") and attempt < policy.max_attempts(step_node.data.get("retry")) and policy.retry_safe(lvl, block):
             delay, retry_info = policy.calculate_backoff(step_node.data.get("retry"), attempt, v.get("code", ""))
@@ -192,8 +192,8 @@ def exec_seq(nodes: list[PipelineNode], scope: Scope, launcher: Launcher) -> Non
                 p = last_inner.resolve_ref_path(exp_ref)
                 if p: scope.exports[f"{node.id}.{exp_name}"] = p
         elif node.kind == "foreach":
-            items = scope.resolve_ref_value(node.data.get("items", "").lstrip("$")) or []
-            for item in items[: int(node.data.get("limit", len(items)))]:
+            items = (scope.resolve_ref_value(node.data.get("items", "").lstrip("$")) or [])[: int(node.data.get("limit", 999999))]
+            for item in items:
                 try: exec_seq(node.steps, scope.child(item=str(item)), launcher)
                 except StepFailed:
                     if node.data.get("item_fail") == "stop": raise

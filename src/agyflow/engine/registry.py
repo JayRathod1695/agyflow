@@ -51,17 +51,20 @@ def load_manifest(manifest_path: Path) -> BlockManifest:
     """Load and parse block.toml."""
     with open(manifest_path, "rb") as f:
         data = tomllib.load(f)
-    block_sec = data.get("block", {})
+    bsec = data.get("block") if isinstance(data.get("block"), dict) else data
+    raw_o, raw_i = data.get("outputs", {}), data.get("inputs", {})
+    outs = {x["name"]: x for x in raw_o if isinstance(x, dict) and "name" in x} if isinstance(raw_o, list) else (raw_o if isinstance(raw_o, dict) else {})
+    ins = {x["name"]: x for x in raw_i if isinstance(x, dict) and "name" in x} if isinstance(raw_i, list) else (raw_i if isinstance(raw_i, dict) else {})
     return BlockManifest(
-        name=block_sec.get("name", manifest_path.parent.name),
-        version=str(block_sec.get("version", "1")),
-        command=block_sec.get("command", ["python3.11", "main.py"]),
+        name=bsec.get("name", manifest_path.parent.name),
+        version=str(bsec.get("version", "1")),
+        command=bsec.get("command", ["python3.11", "main.py"]),
         dir=manifest_path.parent,
-        side_effects=block_sec.get("side_effects", "none"),
-        retry_safe=bool(block_sec.get("retry_safe", False)),
-        inputs=data.get("inputs", {}),
-        outputs=data.get("outputs", {}),
-        dynamic_outputs=bool(block_sec.get("dynamic_outputs", False)),
+        side_effects=bsec.get("side_effects", "none"),
+        retry_safe=bool(bsec.get("retry_safe", False)),
+        inputs=ins,
+        outputs=outs,
+        dynamic_outputs=bool(bsec.get("dynamic_outputs", False)),
     )
 
 

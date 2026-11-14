@@ -33,7 +33,13 @@ M2_BLOCK_NAMES = [
     "converge-check",
 ]
 
-ALL_BLOCK_NAMES = M1_BLOCK_NAMES + M2_BLOCK_NAMES
+M3_BLOCK_NAMES = [
+    "gate-human",
+    "validate-distinct",
+    "validate-urls",
+]
+
+ALL_BLOCK_NAMES = M1_BLOCK_NAMES + M2_BLOCK_NAMES + M3_BLOCK_NAMES
 
 
 class ContractTestResult(NamedTuple):
@@ -138,7 +144,7 @@ def check_nonexistent_in_dir_contract(block_name: str) -> ContractTestResult:
             "--cfg",
             "{}",
         ])
-        # Blocks requiring input reject non-zero; root/cleanup blocks may tolerate optional input
+        # Blocks requiring input reject non-zero; gate-human pauses with 30; root/cleanup tolerate optional input
         if block_name in (
             "context-fresh",
             "worktree-create",
@@ -150,8 +156,12 @@ def check_nonexistent_in_dir_contract(block_name: str) -> ContractTestResult:
             "run-repros",
             "select-findings",
             "converge-check",
+            "validate-distinct",
+            "validate-urls",
         ):
             passed = res.returncode in (1, 2, 20)
+        elif block_name == "gate-human":
+            passed = res.returncode in (20, 30)
         else:
             passed = res.returncode in (0, 1, 2, 20, 30)
         msg = f"Handled non-existent --in with exit code {res.returncode}"
