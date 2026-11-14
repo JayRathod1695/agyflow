@@ -14,7 +14,7 @@ from typing import Any
 
 from agyflow.engine.launcher import get_launcher
 from agyflow.engine.lock import acquire
-from agyflow.engine.pipeline import load_pipeline
+from agyflow.engine.pipeline import load_pipeline, save_expanded_pipeline
 from agyflow.engine.runner import Pause, Scope, StepFailed, Stop, exec_seq
 from agyflow.engine.state import RunState, load_state, repair_state, save_state
 from agyflow.engine import store
@@ -72,10 +72,11 @@ def cmd_run(args: argparse.Namespace) -> int:
                 proj_cfg = tomllib.load(f)
         set_params = dict(kv.split("=", 1) for kv in args.set) if args.set else {}
         tree = load_pipeline(args.pipeline, proj_cfg, set_params, flow_dir.parent)
+        save_expanded_pipeline(tree, run_dir / "pipeline.expanded.yaml")
         (run_dir / "run.toml").write_text(f'run_id = "{run_id}"\npipeline = "{tree.name}"\n')
         state = RunState(run_id=run_id, pipeline=tree.name)
         save_state(run_dir, state)
-        scope = Scope(run_dir, state, proj_cfg, tree.params)
+        scope = Scope(run_dir, state, proj_cfg, tree.params, exports=dict(tree.exports))
         launcher = get_launcher(args.launcher)
 
         while True:

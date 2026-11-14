@@ -40,17 +40,10 @@ def substitute_variables(val: Any, scope_lookup: dict[str, Any]) -> Any:
     """Substitute ${...} variables. Exact single match preserves type; embedded string interpolates."""
     if isinstance(val, str):
         val_str = val.strip()
-        exact_match = re.fullmatch(r"\$\{([a-zA-Z0-9_\.]+)\}", val_str)
-        if exact_match:
-            key = exact_match.group(1)
-            return scope_lookup.get(key, val)
-
-        def _repl(m: re.Match[str]) -> str:
-            k = m.group(1)
-            v = scope_lookup.get(k, "")
-            return str(v)
-
-        return VAR_SUB_RE.sub(_repl, val)
+        exact = re.fullmatch(r"\$\{([a-zA-Z0-9_\.]+)\}", val_str)
+        if exact:
+            return scope_lookup.get(exact.group(1), val)
+        return VAR_SUB_RE.sub(lambda m: str(scope_lookup.get(m.group(1), "")), val)
     if isinstance(val, dict):
         return {k: substitute_variables(v, scope_lookup) for k, v in val.items()}
     if isinstance(val, list):
@@ -64,9 +57,8 @@ def _rewrite_refs(data: Any, prefix: str, declared_inputs: dict[str, str]) -> An
         s = data
         for inp_name, mapped_ref in declared_inputs.items():
             s = s.replace(f"${inp_name}", mapped_ref)
-        # Prefix step refs like $step.art -> $prefix_step.art, but not $project., $prev., $loop.
-        s = re.sub(r"\$(?!(?:project|prev|loop|ana|item)\.)([a-zA-Z0-9_]+)", rf"${prefix}_\1", s)
-        return s
+        # Prefix step refs like $step.art -> $prefix_step.art, exempting builtins ($project, $prev, $loop, $item)
+        return re.sub(r"\$(?!(?:project|prev|loop|item)\.)([a-zA-Z0-9_]+)", rf"${prefix}_\1", s)
     if isinstance(data, dict):
         return {k: _rewrite_refs(v, prefix, declared_inputs) for k, v in data.items()}
     if isinstance(data, list):
@@ -77,6 +69,7 @@ def _rewrite_refs(data: Any, prefix: str, declared_inputs: dict[str, str]) -> An
 def _expand_nodes(
     raw_nodes: list[dict[str, Any]],
     repo_root: Path | str | None,
+    collected_exports: dict[str, str],
     depth: int = 1,
     seen_includes: set[str] | None = None,
 ) -> list[PipelineNode]:
@@ -92,32 +85,31 @@ def _expand_nodes(
             alias = raw.get("as", inc_name)
             if inc_name in seen:
                 raise ValueError(f"Cycle detected in pipeline include: {inc_name}")
-            inc_seen = set(seen) | {inc_name}
 
             inc_path = resolve_pipeline_path(inc_name, repo_root)
             with open(inc_path, "r", encoding="utf-8") as f:
                 inc_yaml = yaml.safe_load(f) or {}
 
             with_map = raw.get("with", {})
+            for exp_name, exp_ref in inc_yaml.get("exports", {}).items():
+                collected_exports[f"{alias}.{exp_name}"] = _rewrite_refs(exp_ref, alias, with_map)
+
             rewritten_steps = _rewrite_refs(inc_yaml.get("steps", []), alias, with_map)
-            expanded_inner = _expand_nodes(rewritten_steps, repo_root, depth + 1, inc_seen)
+            expanded_inner = _expand_nodes(rewritten_steps, repo_root, collected_exports, depth + 1, seen | {inc_name})
             for n in expanded_inner:
                 n.id = f"{alias}_{n.id}"
                 result.append(n)
 
         elif "loop" in raw:
-            node_id = raw["loop"]
-            sub_nodes = _expand_nodes(raw.get("steps", []), repo_root, depth + 1, seen)
-            result.append(PipelineNode(kind="loop", id=node_id, data=raw, steps=sub_nodes))
+            sub = _expand_nodes(raw.get("steps", []), repo_root, collected_exports, depth + 1, seen)
+            result.append(PipelineNode(kind="loop", id=raw["loop"], data=raw, steps=sub))
 
         elif "foreach" in raw:
-            node_id = raw["foreach"]
-            sub_nodes = _expand_nodes(raw.get("steps", []), repo_root, depth + 1, seen)
-            result.append(PipelineNode(kind="foreach", id=node_id, data=raw, steps=sub_nodes))
+            sub = _expand_nodes(raw.get("steps", []), repo_root, collected_exports, depth + 1, seen)
+            result.append(PipelineNode(kind="foreach", id=raw["foreach"], data=raw, steps=sub))
 
         elif "id" in raw:
-            node_id = raw["id"]
-            result.append(PipelineNode(kind="step", id=node_id, data=raw))
+            result.append(PipelineNode(kind="step", id=raw["id"], data=raw))
         else:
             raise ValueError(f"Unrecognized node in steps list: {raw}")
 
@@ -144,8 +136,9 @@ def load_pipeline(
     if set_params:
         params.update(set_params)
 
-    steps = _expand_nodes(data.get("steps", []), repo_root)
-    finally_nodes = _expand_nodes(data.get("finally", []), repo_root)
+    exports = dict(data.get("exports", {}))
+    steps = _expand_nodes(data.get("steps", []), repo_root, exports)
+    finally_nodes = _expand_nodes(data.get("finally", []), repo_root, exports)
 
     return PipelineTree(
         name=data.get("name", p_path.stem),
@@ -153,6 +146,19 @@ def load_pipeline(
         inputs=data.get("inputs", []),
         params=params,
         steps=steps,
-        exports=data.get("exports", {}),
+        exports=exports,
         finally_=finally_nodes,
     )
+
+
+def save_expanded_pipeline(tree: PipelineTree, out_file: Path | str) -> None:
+    """Serialize expanded pipeline to YAML file for provenance and debugging."""
+    p = Path(out_file)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    raw = {
+        "name": tree.name, "version": tree.version, "inputs": tree.inputs,
+        "params": tree.params, "exports": tree.exports,
+        "steps": [n.data for n in tree.steps], "finally": [n.data for n in tree.finally_],
+    }
+    with open(p, "w", encoding="utf-8") as f:
+        yaml.safe_dump(raw, f, sort_keys=False)
