@@ -1,4 +1,4 @@
-"""Contract test runner for all 9 M1 agyflow blocks.
+"""Contract test runner for all 16 agyflow blocks (M1 + M2).
 
 Validates that each block adheres strictly to the Section 4 Unix contract:
   --in <dir> --out <dir> --cfg <json>
@@ -14,7 +14,9 @@ if str(CONTRACT_DIR) not in sys.path:
     sys.path.insert(0, str(CONTRACT_DIR))
 
 from contract_harness import (
+    ALL_BLOCK_NAMES,
     M1_BLOCK_NAMES,
+    M2_BLOCK_NAMES,
     find_block_entrypoint,
     check_block_help_contract,
     check_missing_args_contract,
@@ -23,8 +25,8 @@ from contract_harness import (
 )
 
 
-@pytest.mark.parametrize("block_name", M1_BLOCK_NAMES)
-def test_m1_block_help(block_name: str):
+@pytest.mark.parametrize("block_name", ALL_BLOCK_NAMES)
+def test_block_help(block_name: str):
     """Verify block provides --help and exits 0."""
     entry = find_block_entrypoint(block_name)
     if not entry:
@@ -33,8 +35,8 @@ def test_m1_block_help(block_name: str):
     assert res.passed, f"Block {block_name} --help failed: {res.message}"
 
 
-@pytest.mark.parametrize("block_name", M1_BLOCK_NAMES)
-def test_m1_block_missing_args(block_name: str):
+@pytest.mark.parametrize("block_name", ALL_BLOCK_NAMES)
+def test_block_missing_args(block_name: str):
     """Verify block rejects invocation with missing arguments."""
     entry = find_block_entrypoint(block_name)
     if not entry:
@@ -43,8 +45,8 @@ def test_m1_block_missing_args(block_name: str):
     assert res.passed, f"Block {block_name} allowed missing args: exit {res.exit_code}"
 
 
-@pytest.mark.parametrize("block_name", M1_BLOCK_NAMES)
-def test_m1_block_bad_json_cfg(block_name: str):
+@pytest.mark.parametrize("block_name", ALL_BLOCK_NAMES)
+def test_block_bad_json_cfg(block_name: str):
     """Verify block rejects invalid JSON in --cfg with exit code 20."""
     entry = find_block_entrypoint(block_name)
     if not entry:
@@ -53,8 +55,8 @@ def test_m1_block_bad_json_cfg(block_name: str):
     assert res.passed, f"Block {block_name} bad cfg did not exit 20: got {res.exit_code}"
 
 
-@pytest.mark.parametrize("block_name", M1_BLOCK_NAMES)
-def test_m1_block_nonexistent_in_dir(block_name: str):
+@pytest.mark.parametrize("block_name", ALL_BLOCK_NAMES)
+def test_block_nonexistent_in_dir(block_name: str):
     """Verify block rejects missing input directory with exit code 20."""
     entry = find_block_entrypoint(block_name)
     if not entry:
@@ -64,16 +66,16 @@ def test_m1_block_nonexistent_in_dir(block_name: str):
 
 
 def run_contract_suite() -> int:
-    """CLI runner printing contract compliance status for all 9 blocks."""
+    """CLI runner printing contract compliance status for all 16 blocks."""
     print("=" * 70)
-    print("agyflow Milestone 1: Section 4 Block Contract Validation Suite")
+    print("agyflow Milestone 1 & 2: Section 4 Block Contract Validation Suite")
     print("=" * 70)
 
-    total_blocks = len(M1_BLOCK_NAMES)
+    total_blocks = len(ALL_BLOCK_NAMES)
     implemented_count = 0
     passed_count = 0
 
-    for name in M1_BLOCK_NAMES:
+    for name in ALL_BLOCK_NAMES:
         entry = find_block_entrypoint(name)
         if not entry:
             print(f"[-] {name:20} PENDING (blocks/{name}/run.py not found)")

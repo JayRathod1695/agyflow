@@ -23,6 +23,18 @@ M1_BLOCK_NAMES = [
     "report-write",
 ]
 
+M2_BLOCK_NAMES = [
+    "test-lock",
+    "run-cmd",
+    "assert-run",
+    "parse-junit",
+    "run-repros",
+    "select-findings",
+    "converge-check",
+]
+
+ALL_BLOCK_NAMES = M1_BLOCK_NAMES + M2_BLOCK_NAMES
+
 
 class ContractTestResult(NamedTuple):
     block_name: str
@@ -133,6 +145,11 @@ def check_nonexistent_in_dir_contract(block_name: str) -> ContractTestResult:
             "agent-call-agy",
             "agent-call-fake",
             "validate-evidence",
+            "assert-run",
+            "parse-junit",
+            "run-repros",
+            "select-findings",
+            "converge-check",
         ):
             passed = res.returncode in (1, 2, 20)
         else:
