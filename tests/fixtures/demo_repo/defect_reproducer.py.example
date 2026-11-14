@@ -1,0 +1,19 @@
+"""Defect reproducer for tinycalc.
+
+This test demonstrates the seeded defect where discount is not
+applied before tax computation:
+Expected:
+  subtotal = 100.0, discount = 10%, tax = 10%
+  discounted = 100 * (1 - 0.10) = 90.0
+  with_tax = 90.0 * (1 + 0.10) = 99.0
+Actual (with seeded bug):
+  tax = 10.0, discount = 10.0 -> total = 100.0
+"""
+
+from tinycalc.calculator import compute_discounted_total
+
+
+def test_compound_discount_and_tax_reproducer():
+    # Will FAIL on buggy code (returns 100.0 instead of 99.0)
+    actual = compute_discounted_total(100.0, 10.0, 10.0)
+    assert actual == 99.0, f"Expected 99.0, got {actual}"

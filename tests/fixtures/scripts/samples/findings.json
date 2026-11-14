@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "role": "analyst",
+  "defect_summary": "Logic defect in compute_discounted_total where discount is subtracted after tax computation instead of discounting subtotal first.",
+  "target_file": "src/tinycalc/calculator.py",
+  "culprit_function": "compute_discounted_total",
+  "reproduction": {
+    "subtotal": 100.0,
+    "discount_percent": 10.0,
+    "tax_percent": 10.0,
+    "expected_total": 99.0,
+    "actual_total": 100.0
+  },
+  "proposed_fix": "Compute net_subtotal = subtotal * (1 - discount_percent / 100.0), then final_total = net_subtotal * (1 + tax_percent / 100.0)."
+}

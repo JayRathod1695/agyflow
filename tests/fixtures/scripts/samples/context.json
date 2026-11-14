@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "role": "context_fresh",
+  "repo_root": "tests/fixtures/demo_repo",
+  "head_commit": "c0ffee1234567890abcdef1234567890abcdef12",
+  "files": [
+    {
+      "path": "src/tinycalc/calculator.py",
+      "summary": "Core calculator arithmetic and discount computation with logic defect"
+    },
+    {
+      "path": "tests/test_calculator.py",
+      "summary": "Baseline unit tests covering add, subtract, multiply, divide, and uncompounded discounts"
+    }
+  ],
+  "token_count": 512
+}

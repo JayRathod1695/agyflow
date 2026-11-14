@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "pipeline_name": "m1-baseline",
+  "status": "success",
+  "summary": "Completed analyst review and context building for demo_repo.",
+  "evidence": {
+    "baseline_tests_passed": 6,
+    "defects_identified": 1,
+    "findings_verified": true
+  }
+}
