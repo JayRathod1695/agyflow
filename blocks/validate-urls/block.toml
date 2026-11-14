@@ -1,0 +1,27 @@
+name = "validate-urls"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "network"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "research"
+type = "research"
+
+[[outputs]]
+name = "research_clean"
+type = "research"
+
+[[outputs]]
+name = "dropped"
+type = "dropped"
+
+[cfg_defaults]
+fetch = true
+timeout_s = 10
+allowed_schemes = ["https"]
+offline = "mark"
+max_urls = 8

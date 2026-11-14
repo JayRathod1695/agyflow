@@ -1,0 +1,55 @@
+name: plan
+version: 1
+inputs: [known, context, wt, "attempt_summary?"]
+steps:
+  - id: gate1
+    block: gate-human
+    in: {subject: $known}
+    cfg: {gate: findings, kind: review,
+          instructions: "Mark each UNRUNNABLE or ERROR finding accept or reject."}
+  - id: sel
+    block: select-findings
+    in: {known: $known, approval: $gate1.approval}
+    cfg: {min_severity: HIGH}
+  - id: plan1
+    block: agent-call
+    in: {selected: $sel.selected, context: $context, goal: $project.goal,
+         decisions: $project.decisions, failed: $attempt_summary, wt: $wt}
+    out: {plan: plan}
+    cfg: {role: planner, mode: readonly, vars: {approaches_max: "${project.approaches_max}"}}
+    retry: {max: 2}
+  - id: v1
+    block: validate-distinct
+    in: {plan: $plan1.plan}
+  - id: research
+    block: agent-call
+    when: "len(v1.plan_clean.unknowns) > 0"
+    in: {plan: $v1.plan_clean, goal: $project.goal}
+    out: {research: research}
+    cfg: {role: researcher, mode: readonly, needs_web: true}
+    retry: {max: 1}
+  - id: rv
+    block: validate-urls
+    when: "len(v1.plan_clean.unknowns) > 0"
+    in: {research: $research.research}
+  - id: plan2
+    block: agent-call
+    when: "len(v1.plan_clean.unknowns) > 0"
+    in: {previous_plan: $v1.plan_clean, research: $rv.research_clean, selected: $sel.selected,
+         context: $context, goal: $project.goal, decisions: $project.decisions, wt: $wt}
+    out: {plan: plan}
+    cfg: {role: planner, mode: readonly, vars: {approaches_max: "${project.approaches_max}"}}
+    retry: {max: 2}
+  - id: v2
+    block: validate-distinct
+    when: "len(v1.plan_clean.unknowns) > 0"
+    in: {plan: $plan2.plan}
+  - id: gate2
+    block: gate-human
+    in: {subject: "$v2.plan_clean || $v1.plan_clean"}
+    cfg: {gate: plan, kind: select, select_from: "payload.approaches[*].id",
+          min_select: 1, max_select: "${project.approaches_max}"}
+exports:
+  plan: "$v2.plan_clean || $v1.plan_clean"
+  approval: $gate2.approval
+  approval_findings: $gate1.approval

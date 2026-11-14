@@ -1,0 +1,30 @@
+name = "validate-distinct"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "plan"
+type = "plan"
+
+[[inputs]]
+name = "wt"
+type = "wt"
+optional = true
+
+[[outputs]]
+name = "plan_clean"
+type = "plan"
+
+[[outputs]]
+name = "issues"
+type = "dropped"
+
+[cfg_defaults]
+min_approaches = 2
+similarity = 0.6
+forbidden = [".flow", "tests", "data", "*.ckpt", "*.pt"]
