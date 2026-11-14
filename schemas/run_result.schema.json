@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunResultPayload",
+  "type": "object",
+  "properties": {
+    "cmd": { "type": "array", "items": { "type": "string" } },
+    "cwd": { "type": "string" },
+    "exit_code": { "anyOf": [{ "type": "integer" }, { "type": "null" }] },
+    "timed_out": { "type": "boolean" },
+    "signal": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+    "duration_s": { "type": "number" },
+    "stdout_path": { "type": "string" },
+    "stderr_path": { "type": "string" },
+    "stdout_tail": { "type": "string" },
+    "stderr_tail": { "type": "string" },
+    "truncated": { "type": "boolean" },
+    "junit_path": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+  },
+  "required": [
+    "cmd",
+    "cwd",
+    "exit_code",
+    "timed_out",
+    "signal",
+    "duration_s",
+    "stdout_path",
+    "stderr_path",
+    "stdout_tail",
+    "stderr_tail",
+    "truncated",
+    "junit_path"
+  ],
+  "additionalProperties": false
+}

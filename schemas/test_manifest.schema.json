@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestManifestPayload",
+  "type": "object",
+  "properties": {
+    "paths": { "type": "array", "items": { "type": "string" } },
+    "files": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "root_hash": { "type": "string" }
+  },
+  "required": ["paths", "files", "root_hash"],
+  "additionalProperties": false
+}

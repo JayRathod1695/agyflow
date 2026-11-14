@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AssertionPayload",
+  "type": "object",
+  "properties": {
+    "ok": { "type": "boolean" },
+    "expected": { "type": "string" },
+    "actual": { "type": "string" },
+    "detail": { "type": "string" }
+  },
+  "required": ["ok", "expected", "actual", "detail"],
+  "additionalProperties": false
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConvergencePayload",
+  "type": "object",
+  "properties": {
+    "done": { "type": "boolean" },
+    "reason": { "type": "string" },
+    "round": { "type": "integer", "minimum": 1 },
+    "new_high_ids": { "type": "array", "items": { "type": "string" } },
+    "repeated_fingerprints": { "type": "array", "items": { "type": "string" } },
+    "zero_findings": { "type": "boolean" }
+  },
+  "required": [
+    "done",
+    "reason",
+    "round",
+    "new_high_ids",
+    "repeated_fingerprints",
+    "zero_findings"
+  ],
+  "additionalProperties": false
+}

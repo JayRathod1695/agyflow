@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestSummaryPayload",
+  "type": "object",
+  "properties": {
+    "total": { "type": "integer", "minimum": 0 },
+    "passed": { "type": "integer", "minimum": 0 },
+    "failed": { "type": "integer", "minimum": 0 },
+    "errors": { "type": "integer", "minimum": 0 },
+    "skipped": { "type": "integer", "minimum": 0 },
+    "failed_ids": { "type": "array", "items": { "type": "string" } },
+    "duration_s": { "type": "number" },
+    "source": { "enum": ["junit", "exit_code"] }
+  },
+  "required": [
+    "total",
+    "passed",
+    "failed",
+    "errors",
+    "skipped",
+    "failed_ids",
+    "duration_s",
+    "source"
+  ],
+  "additionalProperties": false
+}
