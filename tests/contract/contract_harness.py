@@ -39,7 +39,14 @@ M3_BLOCK_NAMES = [
     "validate-urls",
 ]
 
-ALL_BLOCK_NAMES = M1_BLOCK_NAMES + M2_BLOCK_NAMES + M3_BLOCK_NAMES
+M4_BLOCK_NAMES = [
+    "pick-item",
+    "patch-export",
+    "diff-guard",
+    "merge-apply",
+]
+
+ALL_BLOCK_NAMES = M1_BLOCK_NAMES + M2_BLOCK_NAMES + M3_BLOCK_NAMES + M4_BLOCK_NAMES
 
 
 class ContractTestResult(NamedTuple):
@@ -158,6 +165,10 @@ def check_nonexistent_in_dir_contract(block_name: str) -> ContractTestResult:
             "converge-check",
             "validate-distinct",
             "validate-urls",
+            "pick-item",
+            "patch-export",
+            "diff-guard",
+            "merge-apply",
         ):
             passed = res.returncode in (1, 2, 20)
         elif block_name == "gate-human":

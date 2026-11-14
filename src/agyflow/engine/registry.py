@@ -28,7 +28,7 @@ def search_paths(kind: str, repo_root: Path | str | None = None) -> list[Path]:
     """Return resolution paths in order: repo .flow/<kind> -> ~/.agyflow/<kind> -> packaged <kind>."""
     paths: list[Path] = []
     root = Path(repo_root).resolve() if repo_root else Path.cwd()
-    paths.append(root / ".flow" / kind)
+    paths.append(root / kind if root.name == ".flow" else root / ".flow" / kind)
     paths.append(Path.home() / ".agyflow" / kind)
     # Repo/packaged root
     pkg_dir = Path(__file__).resolve().parent.parent.parent.parent / kind

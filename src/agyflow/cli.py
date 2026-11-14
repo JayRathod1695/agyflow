@@ -6,6 +6,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import shutil
 import sys
 import time
 import tomllib
@@ -20,8 +21,7 @@ from agyflow.engine.state import RunState, load_state, repair_state, save_state
 
 def _find_flow_dir(repo: Path | None = None) -> Path:
     cand = (repo or Path.cwd()).resolve() / ".flow"
-    cand.mkdir(parents=True, exist_ok=True)
-    return cand
+    cand.mkdir(parents=True, exist_ok=True); return cand
 
 
 def _latest_run_id(flow_dir: Path) -> str:
@@ -86,8 +86,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_resume(args: argparse.Namespace) -> int:
     fd = _find_flow_dir()
-    rid = args.run_id or _latest_run_id(fd)
-    rdir = fd / "runs" / rid
+    rid = args.run_id or _latest_run_id(fd); rdir = fd / "runs" / rid
     handle = acquire(fd, rid)
     try:
         st = load_state(rdir)
@@ -99,8 +98,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    fd = _find_flow_dir()
-    rid = args.run_id or _latest_run_id(fd)
+    fd = _find_flow_dir(); rid = args.run_id or _latest_run_id(fd)
     st = load_state(fd / "runs" / rid)
     print(f"Run ID:   {st.run_id}\nPipeline: {st.pipeline}\nStatus:   {st.status}")
     if st.pending.get("gate"):
@@ -112,26 +110,39 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def _write_gate_response(gate: str, decision: str, picks: list[str], accept: list[str], reject: list[str], note: str) -> int:
-    fd = _find_flow_dir(); rid = _latest_run_id(fd)
-    gdir = fd / "runs" / rid / "gates"
+    fd = _find_flow_dir(); rid = _latest_run_id(fd); gdir = fd / "runs" / rid / "gates"
     req_file = gdir / f"{gate}.request.json"
     if not req_file.is_file(): print(f"Request file not found: {req_file}"); return 1
     sub_hash = json.loads(req_file.read_text(encoding="utf-8")).get("payload", {}).get("subject_hash", "")
     data = {"gate": gate, "decision": decision, "subject_hash": sub_hash, "picks": picks, "accept": accept, "reject": reject, "note": note, "decided_at": datetime.now(timezone.utc).isoformat()}
     (gdir / f"{gate}.approval.json").write_text(json.dumps(data, indent=2))
-    print(f"{decision.capitalize()}d gate {gate} for run {rid}")
-    return 0
+    print(f"{decision.capitalize()}d gate {gate} for run {rid}"); return 0
 
 
 def cmd_approve(args: argparse.Namespace) -> int:
-    picks = args.pick.split(",") if args.pick else []
-    accept = args.accept.split(",") if getattr(args, "accept", None) else []
-    reject = args.reject.split(",") if getattr(args, "reject", None) else []
-    return _write_gate_response(args.gate, "approve", picks, accept, reject, args.note or "")
+    return _write_gate_response(args.gate, "approve", args.pick.split(",") if args.pick else [],
+                                args.accept.split(",") if getattr(args, "accept", None) else [],
+                                args.reject.split(",") if getattr(args, "reject", None) else [], args.note or "")
 
 
 def cmd_reject(args: argparse.Namespace) -> int:
     return _write_gate_response(args.gate, "reject", [], [], [], args.note or "")
+
+
+def cmd_resolve(args: argparse.Namespace) -> int:
+    fd = _find_flow_dir(); rid = args.run_id or getattr(args, "opt_run_id", "") or _latest_run_id(fd)
+    rdir = fd / "runs" / rid; st = load_state(rdir); xid = args.step
+    if args.discard:
+        sdir = rdir / "steps" / xid
+        if (sdir / "out").exists(): shutil.rmtree(sdir / "out")
+        if xid in st.steps: del st.steps[xid]
+        st.status = "running"; save_state(rdir, st)
+        print(f"Resolved step {xid} (--discard): cleared for re-run")
+    elif args.accept:
+        st.mark_committed(xid, "synthetic:accepted")
+        st.status = "running"; save_state(rdir, st)
+        print(f"Resolved step {xid} (--accept): marked committed")
+    return 0
 
 
 def cmd_repair(args: argparse.Namespace) -> int:
@@ -150,10 +161,11 @@ def main(argv: list[str] | None = None) -> int:
     p_stat = sub.add_parser("status"); p_stat.add_argument("run_id", nargs="?")
     p_app = sub.add_parser("approve"); p_app.add_argument("gate"); p_app.add_argument("--pick"); p_app.add_argument("--accept"); p_app.add_argument("--reject"); p_app.add_argument("--note")
     p_rej = sub.add_parser("reject"); p_rej.add_argument("gate"); p_rej.add_argument("--note")
+    p_rsl = sub.add_parser("resolve"); p_rsl.add_argument("step"); p_rsl.add_argument("run_id", nargs="?", default=""); p_rsl.add_argument("--discard", action="store_true"); p_rsl.add_argument("--accept", action="store_true"); p_rsl.add_argument("--run-id", dest="opt_run_id", default="")
     p_rep = sub.add_parser("repair"); p_rep.add_argument("run_id", nargs="?")
 
     args = p.parse_args(argv)
-    disp = {"init": cmd_init, "run": cmd_run, "resume": cmd_resume, "status": cmd_status, "approve": cmd_approve, "reject": cmd_reject, "repair": cmd_repair}
+    disp = {"init": cmd_init, "run": cmd_run, "resume": cmd_resume, "status": cmd_status, "approve": cmd_approve, "reject": cmd_reject, "resolve": cmd_resolve, "repair": cmd_repair}
     return disp[args.cmd](args)
 
 
