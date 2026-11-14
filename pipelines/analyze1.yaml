@@ -1,0 +1,43 @@
+name: analyze1
+version: 1
+steps:
+  - id: snap
+    block: repo-snapshot
+    cfg: {allow_dirty: "${project.allow_dirty}"}
+  - id: ro_wt
+    block: worktree-create
+    in: {snapshot: $snap.snapshot}
+    cfg: {name: ro, readonly: true, apply_dirty: "${project.allow_dirty}"}
+  - id: ctx_fresh
+    block: context-fresh
+    in: {snapshot: $snap.snapshot, context_prev: $project.context}
+  - id: ctx_build
+    block: agent-call
+    when: "ctx_fresh.freshness.fresh == false"
+    in: {snapshot: $snap.snapshot, context_prev: $project.context, wt: $ro_wt.wt}
+    out: {context: context}
+    cfg: {role: context_builder, mode: readonly}
+    retry: {max: 2}
+    timeout: 900s
+  - id: analyst
+    block: agent-call
+    in: {context: "$ctx_build.context || $ctx_fresh.context", goal: $project.goal,
+         decisions: $project.decisions, wt: $ro_wt.wt}
+    out: {findings: findings}
+    cfg: {role: analyst, mode: readonly, vars: {round: 1, max_findings: "${project.analyst_max_findings}"}}
+    retry: {max: 2}
+    timeout: 900s
+  - id: evid
+    block: validate-evidence
+    in: {findings: $analyst.findings, wt: $ro_wt.wt}
+  - id: publish
+    block: project-publish
+    in: {context: "$ctx_build.context || $ctx_fresh.context"}
+finally:
+  - id: report
+    block: report-write
+    on_fail: continue
+  - id: cleanup
+    block: worktree-destroy
+    cfg: {all_for_run: true}
+    on_fail: continue

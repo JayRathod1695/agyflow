@@ -1,0 +1,15 @@
+name = "agent-call-fake"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 30
+needs_run_index = false
+needs_home = false
+dynamic_inputs = true
+dynamic_outputs = true
+
+[cfg_defaults]
+role = ""
+script_dir = ""
+fail = {}

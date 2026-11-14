@@ -1,0 +1,19 @@
+name = "agent-call-agy"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 900
+needs_run_index = false
+needs_home = true
+dynamic_inputs = true
+dynamic_outputs = true
+
+[cfg_defaults]
+role = ""
+mode = "readonly"
+vars = {}
+inline_max_bytes = 6000
+skip_permissions = false
+needs_web = false
+add_dirs = []

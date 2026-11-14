@@ -1,0 +1,21 @@
+name = "worktree-create"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "worktree"
+retry_safe = true
+default_timeout_s = 120
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "snapshot"
+type = "snapshot"
+
+[[outputs]]
+name = "wt"
+type = "wt"
+
+[cfg_defaults]
+name = "wt"
+readonly = false
+apply_dirty = false

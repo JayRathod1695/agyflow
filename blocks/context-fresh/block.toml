@@ -1,0 +1,30 @@
+name = "context-fresh"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "snapshot"
+type = "snapshot"
+
+[[inputs]]
+name = "context_prev"
+type = "context"
+optional = true
+
+[[outputs]]
+name = "freshness"
+type = "freshness"
+
+[[outputs]]
+name = "context"
+type = "context"
+optional = true
+
+[cfg_defaults]
+mode = "paths"
+max_commits_behind = 0

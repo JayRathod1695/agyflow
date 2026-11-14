@@ -1,0 +1,16 @@
+name = "worktree-destroy"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "worktree"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "wt"
+type = "wt"
+optional = true
+
+[cfg_defaults]
+all_for_run = false

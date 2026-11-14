@@ -1,0 +1,28 @@
+name = "validate-evidence"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "findings"
+type = "findings"
+
+[[inputs]]
+name = "wt"
+type = "wt"
+
+[[outputs]]
+name = "findings_clean"
+type = "findings"
+
+[[outputs]]
+name = "dropped"
+type = "dropped"
+
+[cfg_defaults]
+max_drop_ratio = 0.5
+context_lines = 2

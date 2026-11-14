@@ -1,0 +1,17 @@
+name = "project-publish"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "project"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "context"
+type = "context"
+optional = true
+
+[[outputs]]
+name = "publish_result"
+type = "publish_result"
