@@ -1,0 +1,47 @@
+name: preflight
+version: 1
+steps:
+  - id: snap
+    block: repo-snapshot
+    cfg: {allow_dirty: "${project.allow_dirty}"}
+  - id: tests
+    block: test-lock
+    in: {snapshot: $snap.snapshot}
+    cfg: {paths: "${project.test_paths}"}
+  - id: base_wt
+    block: worktree-create
+    in: {snapshot: $snap.snapshot}
+    cfg: {name: base, apply_dirty: "${project.allow_dirty}"}
+  - id: base_run
+    block: run-cmd
+    in: {wt: $base_wt.wt}
+    cfg: {cmd: "${project.test_cmd}", timeout_s: "${project.test_timeout_s}"}
+  - id: base_ok
+    block: assert-run
+    in: {run_result: $base_run.run_result}
+    cfg: {expect_exit: 0, on_mismatch: needs_human, code: E_BASELINE}
+  - id: base_sum
+    block: parse-junit
+    in: {run_result: $base_run.run_result, run_files: $base_run.run_files}
+  - id: ro_wt
+    block: worktree-create
+    in: {snapshot: $snap.snapshot}
+    cfg: {name: ro, readonly: true, apply_dirty: "${project.allow_dirty}"}
+  - id: ctx_fresh
+    block: context-fresh
+    in: {snapshot: $snap.snapshot, context_prev: $project.context}
+  - id: ctx_build
+    block: agent-call
+    when: "ctx_fresh.freshness.fresh == false"
+    in: {snapshot: $snap.snapshot, context_prev: $project.context, wt: $ro_wt.wt}
+    out: {context: context}
+    cfg: {role: context_builder, mode: readonly}
+    retry: {max: 2}
+    timeout: 900s
+exports:
+  snapshot: $snap.snapshot
+  locked_tests: $tests.locked_tests
+  test_manifest: $tests.test_manifest
+  baseline: $base_sum.test_summary
+  ro_wt: $ro_wt.wt
+  context: "$ctx_build.context || $ctx_fresh.context"

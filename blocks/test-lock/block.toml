@@ -1,0 +1,23 @@
+name = "test-lock"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "snapshot"
+type = "snapshot"
+
+[[outputs]]
+name = "locked_tests"
+type = "locked_tests"
+
+[[outputs]]
+name = "test_manifest"
+type = "test_manifest"
+
+[cfg_defaults]
+paths = ["tests"]

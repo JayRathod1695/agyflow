@@ -1,0 +1,29 @@
+name = "run-cmd"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "worktree"
+retry_safe = true
+default_timeout_s = 900
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "wt"
+type = "wt"
+optional = true
+
+[[outputs]]
+name = "run_result"
+type = "run_result"
+
+[[outputs]]
+name = "run_files"
+type = "run_files"
+
+[cfg_defaults]
+cmd = []
+timeout_s = 900
+env_allow = []
+cwd_rel = ""
+max_output_bytes = 1000000
+set_env = {}

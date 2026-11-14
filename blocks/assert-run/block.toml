@@ -1,0 +1,22 @@
+name = "assert-run"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 30
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "run_result"
+type = "run_result"
+
+[[outputs]]
+name = "assertion"
+type = "assertion"
+
+[cfg_defaults]
+expect_exit = 0
+forbid_timeout = true
+on_mismatch = "failed"
+code = "E_POLICY"

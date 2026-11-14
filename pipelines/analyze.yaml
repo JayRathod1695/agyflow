@@ -1,0 +1,34 @@
+name: analyze
+version: 1
+inputs: [snapshot, context, wt, "attempt_summary?"]
+params: {max_rounds: 3}
+steps:
+  - loop: rounds
+    max: "${params.max_rounds}"
+    until: "converge.convergence.done == true"
+    exports: {known: "$converge.known"}
+    steps:
+      - id: analyst
+        block: agent-call
+        in: {context: $context, goal: $project.goal, decisions: $project.decisions, wt: $wt,
+             known: "$prev.converge.known_brief", failed: $attempt_summary}
+        out: {findings: findings}
+        cfg: {role: analyst, mode: readonly,
+              vars: {round: "${loop.iter}", max_findings: "${project.analyst_max_findings}"}}
+        retry: {max: 2}
+        timeout: 900s
+      - id: evid
+        block: validate-evidence
+        in: {findings: $analyst.findings, wt: $wt}
+      - id: repro_wt
+        block: worktree-create
+        in: {snapshot: $snapshot}
+        cfg: {name: "repro-${loop.iter}", apply_dirty: "${project.allow_dirty}"}
+      - id: repros
+        block: run-repros
+        in: {findings: $evid.findings_clean, wt: $repro_wt.wt}
+        cfg: {repeat: 2, timeout_s: 60}
+      - id: converge
+        block: converge-check
+        in: {now: $repros.verified, prev: $prev.converge.known}
+exports: {known: "$rounds.known"}

@@ -1,0 +1,33 @@
+name = "select-findings"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 30
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "known"
+type = "verified"
+
+[[inputs]]
+name = "approval"
+type = "approval"
+optional = true
+
+[[outputs]]
+name = "selected"
+type = "verified"
+
+[[outputs]]
+name = "needs_review"
+type = "verified"
+
+[[outputs]]
+name = "backlog"
+type = "verified"
+
+[cfg_defaults]
+min_severity = "HIGH"
+accept_statuses = ["CONFIRMED"]

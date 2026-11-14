@@ -1,0 +1,25 @@
+name = "parse-junit"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 30
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "run_result"
+type = "run_result"
+
+[[inputs]]
+name = "run_files"
+type = "run_files"
+optional = true
+
+[[outputs]]
+name = "test_summary"
+type = "test_summary"
+
+[cfg_defaults]
+junit_file = "junit.xml"
+max_bytes = 20971520

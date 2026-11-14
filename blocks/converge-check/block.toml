@@ -1,0 +1,32 @@
+name = "converge-check"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 30
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "now"
+type = "verified"
+
+[[inputs]]
+name = "prev"
+type = "verified"
+optional = true
+
+[[outputs]]
+name = "convergence"
+type = "convergence"
+
+[[outputs]]
+name = "known"
+type = "verified"
+
+[[outputs]]
+name = "known_brief"
+type = "known_brief"
+
+[cfg_defaults]
+similarity = 0.7

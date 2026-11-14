@@ -1,0 +1,26 @@
+name = "run-repros"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "worktree"
+retry_safe = true
+default_timeout_s = 300
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "findings"
+type = "findings"
+
+[[inputs]]
+name = "wt"
+type = "wt"
+
+[[outputs]]
+name = "verified"
+type = "verified"
+
+[cfg_defaults]
+repeat = 2
+timeout_s = 60
+allow_kinds = ["python_snippet", "pytest_node", "reasoning"]
+env_allow = []
