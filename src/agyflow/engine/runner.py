@@ -14,7 +14,6 @@ from agyflow.engine.launcher import Launcher
 from agyflow.engine import policy, registry, store
 from agyflow.engine.pipeline import PipelineNode, substitute_variables
 from agyflow.engine.state import RunState, append_event, save_state
-from agyflow.lib.schema import validate_or_raise
 
 
 class Pause(Exception):
@@ -36,18 +35,20 @@ class Scope:
     params: dict[str, Any]
     loop_id: str = ""
     loop_iter: int = 0
+    loop_path: str = ""
     item_id: str = ""
     as_name: str = ""
     in_foreach: bool = False
     exports: dict[str, Any] = field(default_factory=dict)
 
-    def child(self, loop: str = "", iter: int = 0, item: str = "", as_var: str = "") -> Scope:
+    def child(self, loop: str = "", iter: int = 0, item: str = "", as_var: str = "", exports: dict[str, Any] | None = None) -> Scope:
+        lpath = f"{self.loop_path}/{loop}.{iter}" if (self.loop_path and loop) else (f"{loop}.{iter}" if loop else self.loop_path)
         return Scope(self.run_dir, self.state, self.project_cfg, self.params,
-                     loop or self.loop_id, iter or self.loop_iter, item or self.item_id,
-                     as_var or self.as_name, bool(item) or self.in_foreach, self.exports)
+                     loop or self.loop_id, iter or self.loop_iter, lpath, item or self.item_id,
+                     as_var or self.as_name, bool(item) or self.in_foreach, exports if exports is not None else self.exports)
 
     def exec_id(self, step_id: str) -> str:
-        pfx = f"{self.loop_id}.{self.loop_iter}/" if self.loop_id else ""
+        pfx = f"{self.loop_path}/" if self.loop_path else ""
         return f"{pfx}item.{self.item_id}/{step_id}" if self.item_id else f"{pfx}{step_id}"
 
     def lookup_dict(self) -> dict[str, Any]:
@@ -68,13 +69,20 @@ class Scope:
                 if cand.is_file(): return cand
             if opt.startswith("prev."):
                 if self.loop_iter <= 1: continue
-                sname, _, art = opt[5:].partition(".")
-                cand = self.run_dir / "steps" / f"{self.loop_id}.{self.loop_iter - 1}" / sname / "out" / (art if art.endswith(".json") else f"{art}.json")
-                if cand.is_file(): return cand
+                pfx = self.loop_path.rsplit("/", 1)[0] if "/" in self.loop_path else ""
+                prev_d = self.run_dir / "steps" / (f"{pfx}/{self.loop_id}.{self.loop_iter - 1}" if pfx else f"{self.loop_id}.{self.loop_iter - 1}")
+                tgt = opt[5:]; sname, _, art = tgt.partition(".")
+                if (ev := self.exports.get(tgt) or self.exports.get(art)):
+                    es, _, ea = str(ev).lstrip("$").partition(".")
+                    if (c := prev_d / es / "out" / (ea if ea.endswith(".json") else f"{ea}.json")).is_file(): return c
+                fname = art if art.endswith(".json") else f"{art}.json"
+                for sub in (sname, f"{sname}_{art}"):
+                    if (c := prev_d / sub / "out" / fname).is_file(): return c
                 continue
             sname, _, art = opt.partition(".")
             fname = art if art.endswith(".json") else f"{art}.json"
-            if self.loop_id and (c := self.run_dir / "steps" / f"{self.loop_id}.{self.loop_iter}" / sname / "out" / fname).is_file(): return c
+            if self.loop_path and (c := self.run_dir / "steps" / self.loop_path / sname / "out" / fname).is_file(): return c
+            if "/" in self.loop_path and (c := self.run_dir / "steps" / self.loop_path.rsplit("/", 1)[0] / sname / "out" / fname).is_file(): return c
             if (c := self.run_dir / "steps" / sname / "out" / fname).is_file(): return c
         return None
 
@@ -92,24 +100,10 @@ class Scope:
         except Exception: return None
 
 
-def interpret_attempt(res: Any, att: store.AttemptDirs, manifest: registry.BlockManifest) -> dict[str, Any]:
-    if res.timed_out: return {"ok": False, "retryable": True, "code": "E_TIMEOUT", "reason": "Timed out"}
-    if not (sf := att.out_dir / "_status.json").is_file(): return {"ok": False, "retryable": False, "code": "E_CONTRACT", "reason": "Missing _status.json"}
-    try: sdata = json.loads(sf.read_text(encoding="utf-8"))
-    except Exception: return {"ok": False, "retryable": False, "code": "E_CONTRACT", "reason": "Malformed _status.json"}
-    if res.exit_code == 30 or sdata.get("status") == "needs_human":
-        return {"ok": False, "needs_human": True, "code": sdata.get("code", "E_NEEDS_HUMAN"), "reason": sdata.get("reason", "")}
-    if res.exit_code != 0 or not sdata.get("complete"):
-        c = sdata.get("code") or ("E_CONTRACT" if res.exit_code not in (0, 10, 20, 30) else "E_FAILED")
-        return {"ok": False, "retryable": policy.is_retriable_code(c), "code": c, "reason": sdata.get("reason", "")}
-    for k, spec in manifest.outputs.items():
-        if not spec.get("optional", False) and not (of := att.out_dir / f"{k}.json").is_file(): return {"ok": False, "retryable": True, "code": "E_SCHEMA", "reason": f"Missing {k}"}
-    return {"ok": True, "metrics": sdata.get("metrics", {})}
-
-
 def exec_step(step_node: PipelineNode, scope: Scope, launcher: Launcher) -> None:
     xid = scope.exec_id(step_node.id)
-    policy.check_budget(scope.state.counters, scope.project_cfg.get("budget"))
+    try: policy.check_budget(scope.state.counters, scope.project_cfg.get("budget"))
+    except policy.BudgetExceededError as e: raise Stop("stopped_budget", str(e))
     if step_node.data.get("when") and not eval_expr(step_node.data["when"], scope):
         scope.state.mark_skipped(xid); return
     block = registry.resolve_block(step_node.data["block"], scope.project_cfg, scope.run_dir.parent.parent)
@@ -141,17 +135,11 @@ def exec_step(step_node: PipelineNode, scope: Scope, launcher: Launcher) -> None
         store.write_cfg(att.cfg_file, cfg | {"_ctx": {"run_id": scope.state.run_id, "step": xid, "attempt": attempt}})
         res = launcher.run(list(block.command) + ["--in", str(att.in_dir), "--out", str(att.out_dir), "--cfg", str(att.cfg_file)],
                            cwd=block.dir, stdout_log=att.stdout_log, stderr_log=att.stderr_log)
-        v = interpret_attempt(res, att, block)
+        v = store.interpret_attempt(res, att, block)
         scope.state.add_metrics(v.get("metrics"))
 
         if v.get("needs_human"):
-            gate_dir = scope.run_dir / "gates"; gate_dir.mkdir(parents=True, exist_ok=True); sub_h = ""
-            for gf in ("request.json", "review.md"):
-                if (sf := att.out_dir / gf).is_file():
-                    shutil.copy2(sf, gate_dir / f"{step_node.id}.{gf}")
-                    if gf == "request.json":
-                        try: sub_h = json.loads(sf.read_text(encoding="utf-8")).get("payload", {}).get("subject_hash", "")
-                        except Exception: pass
+            sub_h = store.stage_gate(scope.run_dir, step_node.id, att.out_dir)
             scope.state.pending = {"gate": step_node.id, "subject_hash": sub_h}
             raise Pause("paused_gate", xid, v.get("reason", ""))
         if v["ok"]:
@@ -175,13 +163,15 @@ def exec_seq(nodes: list[PipelineNode], scope: Scope, launcher: Launcher) -> Non
         elif node.kind == "loop":
             if node.data.get("when") and not eval_expr(node.data["when"], scope): continue
             max_r = int(substitute_variables(node.data.get("max", 1), scope.lookup_dict()))
+            loop_exp = dict(scope.exports) | node.data.get("exports", {}) | {f"{node.id}.{k}": v for k, v in node.data.get("exports", {}).items()}
             last_inner = scope
             for it in range(1, max_r + 1):
-                last_inner = scope.child(loop=node.id, iter=it)
+                last_inner = scope.child(loop=node.id, iter=it, exports=loop_exp)
                 exec_seq(node.steps, last_inner, launcher)
                 if node.data.get("until") and eval_expr(node.data["until"], last_inner): break
             for exp_name, exp_ref in node.data.get("exports", {}).items():
-                if (p := last_inner.resolve_ref_path(exp_ref)): scope.exports[f"{node.id}.{exp_name}"] = p
+                if (p := last_inner.resolve_ref_path(exp_ref)):
+                    scope.exports[f"{node.id}.{exp_name}"] = p; scope.exports[exp_name] = p
         elif node.kind == "foreach":
             if node.data.get("when") and not eval_expr(node.data["when"], scope): continue
             items = store.resolve_items(node.data.get("items", []), scope.resolve_ref_path, scope.resolve_ref_value)[: int(node.data.get("limit", 999999))]

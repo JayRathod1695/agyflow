@@ -1,0 +1,19 @@
+name = "rank"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "scores"
+type = "score"
+
+[[outputs]]
+name = "ranking"
+type = "ranking"
+
+[cfg_defaults]
+noise_margin = 0.05

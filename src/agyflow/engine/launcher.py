@@ -77,6 +77,13 @@ class SubprocessLauncher:
             stderr=stderr_text,
         )
 
+    @property
+    def capabilities(self) -> dict[str, bool]:
+        return {"stream_guard": True, "subprocess": True}
+
+    def has_capability(self, cap: str) -> bool:
+        return self.capabilities.get(cap, False)
+
 
 def get_launcher(name: str = "subprocess") -> Launcher:
     """Factory to retrieve a configured Launcher."""

@@ -167,3 +167,14 @@ def classify_agent_error(proc_res: ProcResult) -> tuple[int, str, str]:
         return EXIT_RETRYABLE, E_EMPTY, "agent produced empty stdout"
 
     return EXIT_OK, "", "ok"
+
+
+SUPPORTED_CAPABILITIES: dict[str, bool] = {
+    "stream_guard": True,
+    "stream_json_tool_events": True,
+}
+
+
+def has_capability(cap: str) -> bool:
+    """Return whether a given agentlib/launcher capability is supported."""
+    return SUPPORTED_CAPABILITIES.get(cap, False)

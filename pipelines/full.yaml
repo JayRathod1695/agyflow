@@ -1,0 +1,74 @@
+name: full
+version: 1
+steps:
+  - include: preflight
+    as: pre
+  - loop: attempts
+    max: "${project.max_attempts}"
+    until: "act.decision.action != 'restart'"
+    exports:
+      ranking: $act.ranking
+      decision: $act.decision
+      patches: $act.patches
+      patch_metas: $act.patch_metas
+      plan: $pln.plan
+      g1: $pln.approval_findings
+      g2: $pln.approval
+    steps:
+      - include: analyze
+        as: ana
+        with: {snapshot: $pre.snapshot, context: $pre.context, wt: $pre.ro_wt,
+               attempt_summary: "$prev.act.summary"}
+      - include: plan
+        as: pln
+        with: {known: $ana.known, context: $pre.context, wt: $pre.ro_wt,
+               attempt_summary: "$prev.act.summary"}
+      - include: act
+        as: act
+        with: {snapshot: $pre.snapshot, context: $pre.context, plan: $pln.plan, approval: $pln.approval,
+               locked_tests: $pre.locked_tests, test_manifest: $pre.test_manifest, baseline: $pre.baseline}
+  - id: top
+    block: pick-item
+    when: "attempts.decision.action != 'restart'"
+    in: {collection: $attempts.patches, selector: $attempts.ranking}
+    cfg: {mode: collection, from: "payload.winner_id"}
+  - id: review
+    block: agent-call
+    when: "attempts.decision.action != 'restart'"
+    in: {patch: $top.picked, ranking: $attempts.ranking, plan: $attempts.plan, context: $pre.context,
+         wt: $pre.ro_wt}
+    out: {review: review}
+    cfg: {role: reviewer, mode: readonly}
+    retry: {max: 2}
+  - id: gate3
+    block: gate-human
+    when: "attempts.decision.action != 'restart'"
+    in: {subject: $attempts.ranking, view_review: $review.review}
+    cfg: {gate: candidate, kind: select, select_from: "payload.ordered[*].id", min_select: 1, max_select: 1}
+  - id: chosen
+    block: pick-item
+    when: "attempts.decision.action != 'restart' and gate3.approval.decision == 'approve'"
+    in: {collection: $attempts.patches, selector: $gate3.approval}
+    cfg: {mode: collection, from: "payload.picks[0]"}
+  - id: chosen_meta
+    block: pick-item
+    when: "attempts.decision.action != 'restart' and gate3.approval.decision == 'approve'"
+    in: {collection: $attempts.patch_metas, selector: $gate3.approval}
+    cfg: {mode: collection, from: "payload.picks[0]"}
+  - id: merge
+    block: merge-apply
+    when: "attempts.decision.action != 'restart' and gate3.approval.decision == 'approve'"
+    in: {patch: $chosen.picked, patch_meta: $chosen_meta.picked, approval: $gate3.approval,
+         subject: $attempts.ranking, snapshot: $pre.snapshot}
+  - id: publish
+    block: project-publish
+    in: {context: $pre.context, approval_findings: $attempts.g1, approval_plan: $attempts.g2,
+         approval_candidate: $gate3.approval}
+finally:
+  - id: report
+    block: report-write
+    on_fail: continue
+  - id: cleanup
+    block: worktree-destroy
+    cfg: {all_for_run: true}
+    on_fail: continue

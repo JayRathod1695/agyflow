@@ -1,0 +1,29 @@
+name = "branch-decide"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "ranking"
+type = "ranking"
+
+[[inputs]]
+name = "scores"
+type = "score"
+optional = true
+
+[[inputs]]
+name = "index"
+type = "foreach_index"
+optional = true
+
+[[outputs]]
+name = "decision"
+type = "decision"
+
+[cfg_defaults]
+min_pass = 1

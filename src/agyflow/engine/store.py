@@ -48,22 +48,15 @@ def inputs_hash(block: str, cfg: dict[str, Any], inputs: dict[str, Path], prompt
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
 
 
-def _make_readonly(p: Path) -> None:
-    if p.is_dir():
-        for item in p.rglob("*"):
-            item.chmod(stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP if item.is_dir() else stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-        p.chmod(stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-    elif p.is_file(): p.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-
-
 def stage_inputs(in_dir: Path, inputs: dict[str, Path], retry_info: dict[str, Any] | None = None) -> None:
-    for name, src_path in inputs.items():
-        if not src_path.exists(): continue
-        dest = in_dir / name if src_path.is_dir() else in_dir / (name if name.endswith(".json") else f"{name}.json")
-        if dest.exists(): shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
-        shutil.copytree(src_path, dest) if src_path.is_dir() else shutil.copy2(src_path, dest)
-        _make_readonly(dest)
-    if retry_info: atomic_write_json(in_dir / "_retry.json", retry_info)
+    for name, src in inputs.items():
+        dest = in_dir / name if src.is_dir() else in_dir / f"{name}.json"
+        if src.is_dir(): shutil.copytree(src, dest, dirs_exist_ok=True)
+        else: shutil.copy2(src, dest)
+        os.chmod(dest, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+    if retry_info:
+        atomic_write_json(in_dir / "_retry.json", retry_info)
+        os.chmod(in_dir / "_retry.json", stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
 
 def write_cfg(cfg_file: Path, cfg: dict[str, Any]) -> None:
@@ -71,28 +64,26 @@ def write_cfg(cfg_file: Path, cfg: dict[str, Any]) -> None:
 
 
 def commit_attempt(run_dir: Path | str, xid: str, att: AttemptDirs) -> Path:
-    final_out = get_step_dir(run_dir, xid) / "out"
-    if final_out.exists(): shutil.rmtree(final_out) if final_out.is_dir() else final_out.unlink()
-    os.rename(att.out_dir, final_out)
-    return final_out
+    step_dir = get_step_dir(run_dir, xid)
+    dest_out = step_dir / "out"
+    if dest_out.exists(): shutil.rmtree(dest_out)
+    shutil.copytree(att.out_dir, dest_out)
+    return dest_out
 
 
 def check_adoptable(run_dir: Path | str, xid: str, expected_ih: str) -> tuple[bool, Path | None]:
     step_dir = get_step_dir(run_dir, xid)
-    final_out = step_dir / "out"
-    if (sf := final_out / "_status.json").is_file():
-        try:
-            st = json.loads(sf.read_text(encoding="utf-8"))
-            if st.get("complete") is True and st.get("status") == "ok": return True, final_out
-        except Exception: pass
-    attempts_dir = step_dir / "attempts"
-    if attempts_dir.is_dir():
-        for att_dir in sorted(attempts_dir.iterdir(), key=lambda p: int(p.name) if p.name.isdigit() else 0, reverse=True):
-            if (sf := att_dir / "out" / "_status.json").is_file():
-                try:
-                    st = json.loads(sf.read_text(encoding="utf-8"))
-                    if st.get("complete") is True and st.get("status") == "ok": return True, att_dir / "out"
-                except Exception: pass
+    att_parent = step_dir / "attempts"
+    if not att_parent.is_dir(): return False, None
+    for ad in sorted(att_parent.iterdir(), key=lambda p: int(p.name) if p.name.isdigit() else 0, reverse=True):
+        if not ad.is_dir(): continue
+        cfg_f, st_f = ad / "cfg.json", ad / "out" / "_status.json"
+        if cfg_f.is_file() and st_f.is_file():
+            try:
+                st = json.loads(st_f.read_text(encoding="utf-8"))
+                if st.get("complete") is True and st.get("status") == "ok":
+                    return True, ad / "out"
+            except Exception: pass
     return False, None
 
 
@@ -128,3 +119,30 @@ def resolve_items(raw: Any, ref_path_fn: Callable[[str], Path | None], ref_val_f
             except Exception: pass
     val = ref_val_fn(raw.strip().lstrip("$")) if isinstance(raw, str) else None
     return [str(x.get("id", x) if isinstance(x, dict) else x) for x in val] if isinstance(val, list) else []
+
+
+def interpret_attempt(res: Any, att: AttemptDirs, manifest: Any) -> dict[str, Any]:
+    from agyflow.engine.policy import is_retriable_code
+    if res.timed_out: return {"ok": False, "retryable": True, "code": "E_TIMEOUT", "reason": "Timed out"}
+    if not (sf := att.out_dir / "_status.json").is_file(): return {"ok": False, "retryable": False, "code": "E_CONTRACT", "reason": "Missing _status.json"}
+    try: sdata = json.loads(sf.read_text(encoding="utf-8"))
+    except Exception: return {"ok": False, "retryable": False, "code": "E_CONTRACT", "reason": "Malformed _status.json"}
+    if res.exit_code == 30 or sdata.get("status") == "needs_human":
+        return {"ok": False, "needs_human": True, "code": sdata.get("code", "E_NEEDS_HUMAN"), "reason": sdata.get("reason", "")}
+    if res.exit_code != 0 or not sdata.get("complete"):
+        c = sdata.get("code") or ("E_CONTRACT" if res.exit_code not in (0, 10, 20, 30) else "E_FAILED")
+        return {"ok": False, "retryable": is_retriable_code(c), "code": c, "reason": sdata.get("reason", "")}
+    for k, spec in manifest.outputs.items():
+        if not spec.get("optional", False) and not (of := att.out_dir / f"{k}.json").is_file(): return {"ok": False, "retryable": True, "code": "E_SCHEMA", "reason": f"Missing {k}"}
+    return {"ok": True, "metrics": sdata.get("metrics", {})}
+
+
+def stage_gate(run_dir: Path, step_id: str, att_out: Path) -> str:
+    gate_dir = Path(run_dir) / "gates"; gate_dir.mkdir(parents=True, exist_ok=True); sub_h = ""
+    for gf in ("request.json", "review.md"):
+        if (sf := att_out / gf).is_file():
+            shutil.copy2(sf, gate_dir / f"{step_id}.{gf}")
+            if gf == "request.json":
+                try: sub_h = json.loads(sf.read_text(encoding="utf-8")).get("payload", {}).get("subject_hash", "")
+                except Exception: pass
+    return sub_h

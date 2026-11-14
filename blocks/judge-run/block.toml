@@ -1,0 +1,42 @@
+name = "judge-run"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "temp"
+retry_safe = true
+default_timeout_s = 300
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "patch"
+type = "patch"
+optional = true
+
+[[inputs]]
+name = "patch_meta"
+type = "patch_meta"
+optional = true
+
+[[inputs]]
+name = "snapshot"
+type = "snapshot"
+
+[[inputs]]
+name = "locked_tests"
+type = "locked_tests"
+optional = true
+
+[[inputs]]
+name = "baseline"
+type = "test_summary"
+optional = true
+
+[[outputs]]
+name = "score"
+type = "score"
+
+[cfg_defaults]
+test_cmd = "pytest"
+repeat = 5
+seeds = [11, 22, 33, 44, 55]
+required = ["tests_pass", "no_new_failures"]

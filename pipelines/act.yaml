@@ -1,6 +1,6 @@
 name: act
 version: 1
-inputs: [snapshot, context, plan, approval, test_manifest]
+inputs: [snapshot, context, plan, approval, locked_tests, test_manifest, baseline]
 steps:
   - foreach: actors
     items: "$approval#payload.picks"
@@ -33,7 +33,56 @@ steps:
         in: {patch: $patch.patch, patch_meta: $patch.patch_meta, test_manifest: $test_manifest,
              approach: $pick.picked}
         cfg: {forbidden: "${project.forbidden}", allow_new_deps: false}
+      - id: judge
+        block: judge-run
+        in: {patch: $patch.patch, patch_meta: $patch.patch_meta, snapshot: $snapshot,
+             locked_tests: $locked_tests, baseline: $baseline}
+        cfg: {test_cmd: "${project.test_cmd}", repeat: "${project.judge_repeat}", seeds: [11, 22, 33, 44, 55],
+              metric_cmd: "${project.metric_cmd}", holdout_dir: "${project.holdout_dir}",
+              timeout_s: "${project.judge_timeout_s}", required: [tests_pass, no_new_failures]}
+  - id: rank
+    block: rank
+    in: {scores: "$actors[*].judge.score"}
+    cfg: {weights: "${project.weights}", metrics: "${project.metrics}", noise_margin: "${project.noise_margin}"}
+  - id: decide
+    block: branch-decide
+    in: {scores: "$actors[*].judge.score", ranking: $rank.ranking, index: $actors.index}
+  - foreach: stress
+    when: "decide.decision.action == 'stress'"
+    items: "$rank.ranking#payload.ordered[*].id"
+    limit: 2
+    as: sp
+    item_fail: continue
+    steps:
+      - id: spick
+        block: pick-item
+        in: {collection: "$actors[*].patch", item: $sp}
+        cfg: {mode: collection}
+      - id: smeta
+        block: pick-item
+        in: {collection: "$actors[*].patch_meta", item: $sp}
+        cfg: {mode: collection}
+      - id: sjudge
+        block: judge-run
+        in: {patch: $spick.picked, patch_meta: $smeta.picked, snapshot: $snapshot,
+             locked_tests: $locked_tests, baseline: $baseline}
+        cfg: {test_cmd: "${project.test_cmd}", repeat: "${project.stress_repeat}", seeds: [101, 202, 303, 404, 505],
+              extra_cmd: "${project.stress_cmd}", holdout_dir: "${project.holdout_dir}",
+              timeout_s: "${project.judge_timeout_s}", required: [tests_pass, no_new_failures]}
+  - id: rank2
+    block: rank
+    when: "decide.decision.action == 'stress'"
+    in: {scores: "$stress[*].sjudge.score"}
+    cfg: {weights: "${project.weights}", metrics: "${project.metrics}", noise_margin: "${project.noise_margin}"}
+  - id: sum
+    block: attempt-summary
+    in: {plan: $plan, scores: "$actors[*].judge.score", results: "$actors[*].act.result",
+         guards: "$actors[*].guard.guard", index: $actors.index, decision: $decide.decision}
+    cfg: {attempt: "${loop.iter}"}
 exports:
+  ranking: "$rank2.ranking || $rank.ranking"
+  decision: $decide.decision
   patches: "$actors[*].patch"
   patch_metas: "$actors[*].patch_meta"
-  index: "$actors.index"
+  index: $actors.index
+  summary: $sum.attempt_summary

@@ -1,0 +1,43 @@
+name = "attempt-summary"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "plan"
+type = "plan"
+
+[[inputs]]
+name = "decision"
+type = "decision"
+
+[[inputs]]
+name = "scores"
+type = "score"
+optional = true
+
+[[inputs]]
+name = "results"
+type = "result"
+optional = true
+
+[[inputs]]
+name = "guards"
+type = "guard"
+optional = true
+
+[[inputs]]
+name = "index"
+type = "foreach_index"
+optional = true
+
+[[outputs]]
+name = "attempt_summary"
+type = "attempt_summary"
+
+[cfg_defaults]
+attempt = 1

@@ -15,6 +15,7 @@ from typing import Any
 from agyflow.engine.launcher import get_launcher
 from agyflow.engine.lock import acquire
 from agyflow.engine.pipeline import load_pipeline, save_expanded_pipeline
+from agyflow.engine.policy import BudgetExceededError
 from agyflow.engine.runner import Pause, Scope, StepFailed, Stop, exec_seq
 from agyflow.engine.state import RunState, load_state, repair_state, save_state
 
@@ -61,7 +62,15 @@ def _run_engine(run_dir: Path, flow_dir: Path, tree: Any, state: RunState, proj_
                 while not app_path.is_file(): time.sleep(1.0)
                 print(f"Gate {gate_name} approved. Resuming..."); continue
             return 30
-        except (Stop, StepFailed) as s:
+        except (Stop, BudgetExceededError) as s:
+            is_budget = isinstance(s, BudgetExceededError) or (isinstance(s, Stop) and getattr(s, "kind", "") == "stopped_budget")
+            state.status = "stopped_budget" if is_budget else "failed"
+            save_state(run_dir, state); print(f"Run {state.run_id} {state.status}: {s}")
+            for node in tree.finally_:
+                try: exec_seq([node], scope, launcher)
+                except Exception: pass
+            return 2 if is_budget else 1
+        except StepFailed as s:
             state.status = "failed"; save_state(run_dir, state); print(f"Run {state.run_id} failed: {s}")
             for node in tree.finally_:
                 try: exec_seq([node], scope, launcher)
