@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RankingPayload",
+  "type": "object",
+  "properties": {
+    "ordered": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "score": { "type": "number" },
+          "patch_sha256": { "type": "string" },
+          "detail": { "type": "string" }
+        },
+        "required": ["id", "score", "patch_sha256", "detail"],
+        "additionalProperties": false
+      }
+    },
+    "winner_id": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+    "close_call": { "type": "boolean" },
+    "margin": { "anyOf": [{ "type": "number" }, { "type": "null" }] }
+  },
+  "required": ["ordered", "winner_id", "close_call", "margin"],
+  "additionalProperties": false
+}

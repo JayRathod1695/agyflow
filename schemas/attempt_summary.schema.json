@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AttemptSummaryPayload",
+  "type": "object",
+  "properties": {
+    "attempt": { "type": "integer", "minimum": 1 },
+    "tried": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "approach_id": { "type": "string" },
+          "title": { "type": "string" },
+          "outcome": { "enum": ["passed", "failed_tests", "guard_rejected", "actor_blocked", "error"] },
+          "required_failures": { "type": "array", "items": { "type": "string" } },
+          "open_issues": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["approach_id", "title", "outcome", "required_failures", "open_issues"],
+        "additionalProperties": false
+      }
+    },
+    "action": { "type": "string" }
+  },
+  "required": ["attempt", "tried", "action"],
+  "additionalProperties": false
+}

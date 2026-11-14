@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScorePayload",
+  "type": "object",
+  "properties": {
+    "item_id": { "type": "string" },
+    "passed": { "type": "boolean" },
+    "patch_sha256": { "type": "string" },
+    "required_failures": { "type": "array", "items": { "type": "string" } },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "seed": { "type": "integer" },
+          "exit_code": { "anyOf": [{ "type": "integer" }, { "type": "null" }] },
+          "passed": { "type": "integer", "minimum": 0 },
+          "failed": { "type": "integer", "minimum": 0 },
+          "errors": { "type": "integer", "minimum": 0 },
+          "duration_s": { "type": "number" }
+        },
+        "required": ["seed", "exit_code", "passed", "failed", "errors", "duration_s"],
+        "additionalProperties": false
+      }
+    },
+    "flaky_tests": { "type": "array", "items": { "type": "string" } },
+    "new_failures": { "type": "array", "items": { "type": "string" } },
+    "metrics": { "type": "object", "additionalProperties": { "type": "number" } },
+    "lines_changed": { "type": "integer", "minimum": 0 }
+  },
+  "required": [
+    "item_id",
+    "passed",
+    "patch_sha256",
+    "required_failures",
+    "runs",
+    "flaky_tests",
+    "new_failures",
+    "metrics",
+    "lines_changed"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DecisionPayload",
+  "type": "object",
+  "properties": {
+    "action": { "enum": ["restart", "stress", "proceed"] },
+    "reason": { "type": "string" },
+    "passing_ids": { "type": "array", "items": { "type": "string" } },
+    "failing_ids": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["action", "reason", "passing_ids", "failing_ids"],
+  "additionalProperties": false
+}
