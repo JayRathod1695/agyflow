@@ -1,0 +1,35 @@
+name = "merge-apply"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "repo"
+retry_safe = false
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "patch"
+type = "patch"
+
+[[inputs]]
+name = "patch_meta"
+type = "patch_meta"
+
+[[inputs]]
+name = "approval"
+type = "approval"
+
+[[inputs]]
+name = "subject"
+type = "any"
+
+[[inputs]]
+name = "snapshot"
+type = "snapshot"
+
+[[outputs]]
+name = "merge_result"
+type = "merge_result"
+
+[cfg_defaults]
+mode = "branch"

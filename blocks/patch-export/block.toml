@@ -1,0 +1,32 @@
+name = "patch-export"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "worktree"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "wt"
+type = "wt"
+
+[[inputs]]
+name = "snapshot"
+type = "snapshot"
+
+[[inputs]]
+name = "approach"
+type = "approach"
+optional = true
+
+[[outputs]]
+name = "patch"
+type = "patch"
+
+[[outputs]]
+name = "patch_meta"
+type = "patch_meta"
+
+[cfg_defaults]
+exclude = ".agyflow*"

@@ -1,0 +1,37 @@
+name = "diff-guard"
+version = "1"
+command = ["python3", "run.py"]
+side_effects = "none"
+retry_safe = true
+default_timeout_s = 60
+needs_run_index = false
+needs_home = false
+
+[[inputs]]
+name = "patch"
+type = "patch"
+
+[[inputs]]
+name = "patch_meta"
+type = "patch_meta"
+
+[[inputs]]
+name = "test_manifest"
+type = "test_manifest"
+
+[[inputs]]
+name = "approach"
+type = "approach"
+optional = true
+
+[[outputs]]
+name = "guard"
+type = "guard"
+
+[cfg_defaults]
+forbidden = [".flow", "tests", "data", "*.ckpt", "*.pt"]
+max_files = 20
+max_changed_lines = 1000
+allow_new_deps = false
+dep_files = ["requirements.txt", "pyproject.toml", "setup.py", "package.json", "poetry.lock", "Pipfile"]
+allow_binary = false

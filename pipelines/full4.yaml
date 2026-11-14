@@ -1,0 +1,43 @@
+name: full4
+version: 1
+steps:
+  - id: preflight
+    pipeline: preflight.yaml
+  - id: analyze
+    pipeline: analyze.yaml
+    in: {snapshot: $preflight.snapshot, context: $preflight.context, wt: $preflight.ro_wt}
+  - id: plan
+    pipeline: plan.yaml
+    in: {known: $analyze.known, context: $preflight.context, wt: $preflight.ro_wt}
+  - id: act
+    pipeline: act.yaml
+    in: {snapshot: $preflight.snapshot, context: $preflight.context, plan: $plan.plan,
+         approval: $plan.approval, test_manifest: $preflight.test_manifest}
+  - id: gate3
+    block: gate-human
+    in: {subject: $act.index}
+    cfg: {gate: candidate, kind: select, select_from: "payload.items[*].id", min_select: 1, max_select: 1,
+          instructions: "Select the candidate approach to merge."}
+  - id: pick_patch
+    block: pick-item
+    when: "gate3.approval.decision == 'approve'"
+    in: {collection: $act.patches, selector: $gate3.approval}
+    cfg: {mode: collection, from: "payload.picks"}
+  - id: pick_meta
+    block: pick-item
+    when: "gate3.approval.decision == 'approve'"
+    in: {collection: $act.patch_metas, selector: $gate3.approval}
+    cfg: {mode: collection, from: "payload.picks"}
+  - id: merge
+    block: merge-apply
+    when: "gate3.approval.decision == 'approve'"
+    in: {patch: $pick_patch.picked, patch_meta: $pick_meta.picked, approval: $gate3.approval,
+         subject: $act.index, snapshot: $preflight.snapshot}
+finally:
+  - id: report
+    block: report-write
+    on_fail: continue
+  - id: cleanup
+    block: worktree-destroy
+    cfg: {all_for_run: true}
+    on_fail: continue

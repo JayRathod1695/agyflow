@@ -1,0 +1,39 @@
+name: act
+version: 1
+inputs: [snapshot, context, plan, approval, test_manifest]
+steps:
+  - foreach: actors
+    items: "$approval#payload.picks"
+    as: ap
+    max_parallel: "${project.max_parallel}"
+    item_fail: continue
+    steps:
+      - id: pick
+        block: pick-item
+        in: {source: $plan, item: $ap}
+        cfg: {mode: json_list, from: "payload.approaches", key: id}
+      - id: wt
+        block: worktree-create
+        in: {snapshot: $snapshot}
+        cfg: {name: "act-${item.id}", apply_dirty: "${project.allow_dirty}"}
+      - id: act
+        block: agent-call
+        side_effects: worktree
+        in: {approach: $pick.picked, context: $context, decisions: $project.decisions, wt: $wt.wt}
+        out: {result: result}
+        cfg: {role: actor, mode: edit, skip_permissions: "${project.actor_skip_permissions}",
+              vars: {smoke_cmd: "${project.smoke_cmd}", forbidden: "${project.forbidden}"}}
+        retry: {max: 1}
+        timeout: "${project.actor_timeout_s}s"
+      - id: patch
+        block: patch-export
+        in: {wt: $wt.wt, snapshot: $snapshot, approach: $pick.picked}
+      - id: guard
+        block: diff-guard
+        in: {patch: $patch.patch, patch_meta: $patch.patch_meta, test_manifest: $test_manifest,
+             approach: $pick.picked}
+        cfg: {forbidden: "${project.forbidden}", allow_new_deps: false}
+exports:
+  patches: "$actors[*].patch"
+  patch_metas: "$actors[*].patch_meta"
+  index: "$actors.index"
