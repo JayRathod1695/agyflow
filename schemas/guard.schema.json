@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GuardPayload",
+  "type": "object",
+  "properties": {
+    "ok": { "type": "boolean" },
+    "violations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "detail": { "type": "string" }
+        },
+        "required": ["code", "detail"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["ok", "violations"],
+  "additionalProperties": false
+}

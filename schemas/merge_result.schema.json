@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MergeResultPayload",
+  "type": "object",
+  "properties": {
+    "branch": { "type": "string" },
+    "commit": { "type": "string" },
+    "base_commit": { "type": "string" },
+    "patch_sha256": { "type": "string" }
+  },
+  "required": ["branch", "commit", "base_commit", "patch_sha256"],
+  "additionalProperties": false
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResultPayload",
+  "type": "object",
+  "properties": {
+    "approach_id": { "type": "string" },
+    "status": { "enum": ["done", "partial", "blocked"] },
+    "summary": { "type": "string", "maxLength": 500 },
+    "files_changed": { "type": "array", "items": { "type": "string" } },
+    "commands_run": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cmd": { "type": "string", "maxLength": 200 },
+          "exit_code": { "anyOf": [{ "type": "integer" }, { "type": "null" }] }
+        },
+        "required": ["cmd", "exit_code"],
+        "additionalProperties": false
+      },
+      "maxItems": 40
+    },
+    "smoke": {
+      "type": "object",
+      "properties": {
+        "ran": { "type": "boolean" },
+        "exit_code": { "anyOf": [{ "type": "integer" }, { "type": "null" }] },
+        "notes": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["ran", "exit_code", "notes"],
+      "additionalProperties": false
+    },
+    "deviations_from_plan": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 200 }
+    },
+    "open_issues": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 200 }
+    }
+  },
+  "required": [
+    "approach_id",
+    "status",
+    "summary",
+    "files_changed",
+    "commands_run",
+    "smoke",
+    "deviations_from_plan",
+    "open_issues"
+  ],
+  "additionalProperties": false
+}

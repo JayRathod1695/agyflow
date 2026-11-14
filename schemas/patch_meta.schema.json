@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PatchMetaPayload",
+  "type": "object",
+  "properties": {
+    "approach_id": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+    "base_commit": { "type": "string" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "insertions": { "type": "integer", "minimum": 0 },
+          "deletions": { "type": "integer", "minimum": 0 },
+          "status": { "enum": ["A", "M", "D", "R"] }
+        },
+        "required": ["path", "insertions", "deletions", "status"],
+        "additionalProperties": false
+      }
+    },
+    "insertions": { "type": "integer", "minimum": 0 },
+    "deletions": { "type": "integer", "minimum": 0 },
+    "patch_sha256": { "type": "string" },
+    "binary_files": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": [
+    "approach_id",
+    "base_commit",
+    "files",
+    "insertions",
+    "deletions",
+    "patch_sha256",
+    "binary_files"
+  ],
+  "additionalProperties": false
+}
