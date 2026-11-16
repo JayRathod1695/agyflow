@@ -93,6 +93,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         save_expanded_pipeline(tree, rdir / "pipeline.expanded.yaml")
         (rdir / "run.toml").write_text(f'run_id = "{rid}"\npipeline = "{tree.name}"\n')
         st = RunState(run_id=rid, pipeline=tree.name); save_state(rdir, st)
+        if getattr(args, "cockpit", False):
+            from agyflow.ui.dashboard import launch_in_herdr_sidebar
+            launch_in_herdr_sidebar(rdir, fd.parent)
         return _run_engine(rdir, fd, tree, st, pcfg, args.launcher, args.wait_gate)
     finally: handle.release()
 
@@ -109,7 +112,11 @@ def cmd_resume(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    fd = _find_flow_dir(); rid = args.run_id or _latest_run_id(fd); st = load_state(fd / "runs" / rid)
+    fd = _find_flow_dir(); rid = args.run_id or _latest_run_id(fd); rdir = fd / "runs" / rid
+    if getattr(args, "tui", False):
+        from agyflow.ui.dashboard import run_dashboard_ui
+        return run_dashboard_ui(rdir)
+    st = load_state(rdir)
     print(f"Run ID:   {st.run_id}\nPipeline: {st.pipeline}\nStatus:   {st.status}")
     if st.pending.get("gate"): print(f"Pending Gate: {st.pending['gate']}")
     for xid, rec in st.steps.items(): print(f"  [{rec.status.upper()}] {xid} (attempt {rec.attempt})")
@@ -173,9 +180,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     p_init = sub.add_parser("init"); p_init.add_argument("--repo", default="."); p_init.add_argument("--template", choices=["ml", "generic"], default="generic")
     p_run = sub.add_parser("run"); p_run.add_argument("pipeline"); p_run.add_argument("--set", action="append")
-    p_run.add_argument("--wait-gate", action="store_true"); p_run.add_argument("--launcher", default="subprocess")
+    p_run.add_argument("--wait-gate", action="store_true"); p_run.add_argument("--launcher", default="subprocess"); p_run.add_argument("--cockpit", action="store_true")
     p_res = sub.add_parser("resume"); p_res.add_argument("run_id", nargs="?"); p_res.add_argument("--wait-gate", action="store_true")
-    p_stat = sub.add_parser("status"); p_stat.add_argument("run_id", nargs="?")
+    p_stat = sub.add_parser("status"); p_stat.add_argument("run_id", nargs="?"); p_stat.add_argument("--tui", action="store_true")
     p_app = sub.add_parser("approve"); p_app.add_argument("gate"); p_app.add_argument("--pick"); p_app.add_argument("--accept"); p_app.add_argument("--reject"); p_app.add_argument("--note")
     p_rej = sub.add_parser("reject"); p_rej.add_argument("gate"); p_rej.add_argument("--note")
     p_rsl = sub.add_parser("resolve"); p_rsl.add_argument("step"); p_rsl.add_argument("run_id", nargs="?", default=""); p_rsl.add_argument("--discard", action="store_true"); p_rsl.add_argument("--accept", action="store_true"); p_rsl.add_argument("--run-id", dest="opt_run_id", default="")
