@@ -50,10 +50,12 @@ def inputs_hash(block: str, cfg: dict[str, Any], inputs: dict[str, Path], prompt
 
 def stage_inputs(in_dir: Path, inputs: dict[str, Path], retry_info: dict[str, Any] | None = None) -> None:
     for name, src in inputs.items():
-        dest = in_dir / name if src.is_dir() else in_dir / f"{name}.json"
+        dest = in_dir / name if src.is_dir() else (in_dir / f"{name}{src.suffix}" if src.suffix else in_dir / f"{name}.json")
+        if dest.exists():
+            os.chmod(dest, stat.S_IRWXU); (shutil.rmtree(dest) if dest.is_dir() else dest.unlink())
         if src.is_dir(): shutil.copytree(src, dest, dirs_exist_ok=True)
         else: shutil.copy2(src, dest)
-        os.chmod(dest, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        if not dest.is_dir(): os.chmod(dest, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
     if retry_info:
         atomic_write_json(in_dir / "_retry.json", retry_info)
         os.chmod(in_dir / "_retry.json", stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
@@ -90,15 +92,27 @@ def check_adoptable(run_dir: Path | str, xid: str, expected_ih: str) -> tuple[bo
 def build_collection(run_dir: Path, ref_opt: str) -> Path | None:
     _, _, rest = ref_opt.partition("[*].")
     sname, _, art = rest.partition(".")
-    fname = art if art.endswith(".json") else f"{art}.json"
-    coll_dir = run_dir / "collections" / f"{sname}_{art}"
+    fname = (art if art.endswith(".json") else f"{art}.json") if art else ""
+    coll_dir = run_dir / "collections" / f"{sname}_{art or 'all'}"
     coll_dir.mkdir(parents=True, exist_ok=True); count = 0
     if (steps_dir := run_dir / "steps").is_dir():
-        for sdir in steps_dir.iterdir():
-            if (src := sdir / sname / "out" / fname).is_file():
-                item_dest = coll_dir / sdir.name.removeprefix("item.")
-                item_dest.mkdir(parents=True, exist_ok=True)
+        item_dirs = [p for p in steps_dir.glob("**/item.*") if p.is_dir()] or [p for p in steps_dir.iterdir() if p.is_dir()]
+        for sdir in item_dirs:
+            item_name = sdir.name.removeprefix("item.")
+            step_out = None
+            for cand in [sdir / sname / "out"] + [p / "out" for p in sdir.glob(f"*{sname}")]:
+                if cand.is_dir(): step_out = cand; break
+            if not step_out and not art:
+                for sub in sdir.iterdir():
+                    if sub.is_dir() and (sub / "out" / f"{sname}.json").is_file():
+                        step_out = sub / "out"; fname = f"{sname}.json"; break
+            if not step_out or not step_out.is_dir(): continue
+            item_dest = coll_dir / item_name; item_dest.mkdir(parents=True, exist_ok=True)
+            if fname and (src := step_out / fname).is_file():
                 shutil.copy2(src, item_dest / fname); count += 1
+            elif not fname:
+                for f in step_out.iterdir():
+                    if f.is_file() and not f.name.startswith("_"): shutil.copy2(f, item_dest / f.name); count += 1
     return coll_dir if count > 0 else None
 
 
@@ -133,7 +147,9 @@ def interpret_attempt(res: Any, att: AttemptDirs, manifest: Any) -> dict[str, An
         c = sdata.get("code") or ("E_CONTRACT" if res.exit_code not in (0, 10, 20, 30) else "E_FAILED")
         return {"ok": False, "retryable": is_retriable_code(c), "code": c, "reason": sdata.get("reason", "")}
     for k, spec in manifest.outputs.items():
-        if not spec.get("optional", False) and not (of := att.out_dir / f"{k}.json").is_file(): return {"ok": False, "retryable": True, "code": "E_SCHEMA", "reason": f"Missing {k}"}
+        cands = (att.out_dir / f"{k}.json", att.out_dir / f"{k}.patch", att.out_dir / f"{k}.md", att.out_dir / f"{k.upper()}.md", att.out_dir / k)
+        if not spec.get("optional", False) and not any(c.exists() for c in cands):
+            return {"ok": False, "retryable": True, "code": "E_SCHEMA", "reason": f"Missing {k}"}
     return {"ok": True, "metrics": sdata.get("metrics", {})}
 
 

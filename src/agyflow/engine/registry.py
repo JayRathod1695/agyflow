@@ -21,6 +21,7 @@ class BlockManifest:
     retry_safe: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
     outputs: dict[str, Any] = field(default_factory=dict)
+    dynamic_inputs: bool = False
     dynamic_outputs: bool = False
 
 
@@ -64,6 +65,7 @@ def load_manifest(manifest_path: Path) -> BlockManifest:
         retry_safe=bool(bsec.get("retry_safe", False)),
         inputs=ins,
         outputs=outs,
+        dynamic_inputs=bool(bsec.get("dynamic_inputs", False)),
         dynamic_outputs=bool(bsec.get("dynamic_outputs", False)),
     )
 

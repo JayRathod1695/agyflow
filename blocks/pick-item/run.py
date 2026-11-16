@@ -28,7 +28,15 @@ def _get_nested(data: Any, path: str) -> Any:
         part = part.strip()
         if not part:
             continue
-        if isinstance(curr, dict):
+        if "[" in part and part.endswith("]"):
+            name, idx_s = part[:-1].split("[", 1)
+            if isinstance(curr, dict) and name:
+                curr = curr.get(name)
+            if isinstance(curr, list) and idx_s.isdigit() and int(idx_s) < len(curr):
+                curr = curr[int(idx_s)]
+            else:
+                return None
+        elif isinstance(curr, dict):
             curr = curr.get(part)
         else:
             return None
@@ -59,12 +67,24 @@ def main() -> int:
             try:
                 _, sel_payload = read_artifact(selector_file)
                 val = _get_nested(sel_payload, from_path)
+                if val is None and from_path.startswith("payload."):
+                    val = _get_nested(sel_payload, from_path[8:])
                 if isinstance(val, list) and val:
                     target_id = str(val[0])
                 elif val is not None:
                     target_id = str(val)
             except Exception:
                 pass
+
+    if not target_id:
+        ctx_item = str(args.ctx.get("item_id") or args.ctx.get("item") or args.cfg.get("item") or "")
+        if ctx_item:
+            target_id = ctx_item
+        else:
+            for part in str(args.ctx.get("step", "")).split("/"):
+                if part.startswith("item."):
+                    target_id = part.removeprefix("item.")
+                    break
 
     out_name = "picked"
     out_type = "approach"

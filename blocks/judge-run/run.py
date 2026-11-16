@@ -110,7 +110,7 @@ def main() -> int:
 
         for seed in seeds:
             t0 = time.time()
-            res = run_command(shlex.split(test_cmd), cwd=scratch, env_overrides={"SEED": str(seed), "PYTHONHASHSEED": str(seed)}, timeout_sec=timeout_s)
+            res = run_command(shlex.split(test_cmd), cwd=scratch, env={"SEED": str(seed), "PYTHONHASHSEED": str(seed)}, timeout_s=timeout_s)
             dur = round(time.time() - t0, 3)
 
             xml_candidates = list(scratch.rglob("*.xml"))
@@ -127,12 +127,12 @@ def main() -> int:
             for tid in f_ids: test_outcomes.setdefault(tid, set()).add("FAIL")
             runs.append({"seed": seed, "exit_code": res.returncode, "passed": passed, "failed": failed, "errors": errors, "duration_s": dur})
 
-        if args.cfg.get("extra_cmd"):
-            run_command(shlex.split(args.cfg["extra_cmd"]), cwd=scratch, timeout_sec=timeout_s)
+        if args.cfg.get("extra_cmd") and not str(args.cfg["extra_cmd"]).startswith("${"):
+            run_command(shlex.split(args.cfg["extra_cmd"]), cwd=scratch, timeout_s=timeout_s)
 
         metrics: dict[str, float] = {}
-        if args.cfg.get("metric_cmd"):
-            m_res = run_command(shlex.split(args.cfg["metric_cmd"]), cwd=scratch, timeout_sec=timeout_s)
+        if args.cfg.get("metric_cmd") and not str(args.cfg["metric_cmd"]).startswith("${"):
+            m_res = run_command(shlex.split(args.cfg["metric_cmd"]), cwd=scratch, timeout_s=timeout_s)
             try:
                 metrics = {k: float(v) for k, v in json.loads(m_res.stdout).items()}
             except Exception: pass

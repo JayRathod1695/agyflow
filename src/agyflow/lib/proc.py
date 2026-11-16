@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
 import time
 from typing import Any
 
@@ -50,6 +51,10 @@ def scrub_env(
     for key in allowed:
         if key in os.environ:
             cleaned[key] = os.environ[key]
+    if "PATH" in cleaned:
+        py_bin = str(Path(sys.executable).parent)
+        if py_bin not in cleaned["PATH"]:
+            cleaned["PATH"] = f"{py_bin}:{cleaned['PATH']}"
 
     if needs_home:
         if "HOME" in os.environ:
@@ -90,6 +95,9 @@ def run_command(
     """Run command with process group, timeout kill, output cap, and environment isolation."""
     if not cmd or not isinstance(cmd, list):
         raise ValueError(f"cmd must be a non-empty list of arguments, got: {cmd}")
+    cmd = list(cmd)
+    if cmd and cmd[0] in ("python", "python3", "python3.11"):
+        cmd[0] = sys.executable
 
     run_env = env if env is not None else scrub_env(
         env_allow=env_allow, needs_home=needs_home, home_dir=home_dir

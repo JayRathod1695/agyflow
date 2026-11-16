@@ -54,7 +54,11 @@ def _run_engine(run_dir: Path, flow_dir: Path, tree: Any, state: RunState, proj_
     while True:
         try:
             exec_seq(tree.steps, scope, launcher)
-            state.status = "done"; save_state(run_dir, state); print(f"Run {state.run_id} done."); return 0
+            state.status = "done"; save_state(run_dir, state); print(f"Run {state.run_id} done.")
+            for node in tree.finally_:
+                try: exec_seq([node], scope, launcher)
+                except Exception: pass
+            return 0
         except Pause as p:
             state.status = p.kind; save_state(run_dir, state); gate_name = p.xid.split("/")[-1]
             print(f"Run paused ({p.kind}) at {p.xid}. Review: {run_dir / 'gates' / f'{gate_name}.review.md'}")

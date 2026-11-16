@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -18,6 +19,7 @@ from agyflow.lib.contract import (
     EXIT_OK,
     EXIT_RETRYABLE,
     parse_cli_args,
+    read_artifact,
     write_artifact,
     write_status,
 )
@@ -71,7 +73,7 @@ def main() -> int:
         )
         return exit_code
 
-    script_dir_val = args.cfg.get("script_dir")
+    script_dir_val = args.cfg.get("script_dir") or os.environ.get("AGYFLOW_FIXTURES_DIR")
     if script_dir_val:
         script_dir = Path(script_dir_val).resolve()
     else:
@@ -109,6 +111,18 @@ def main() -> int:
             complete=False,
         )
         return EXIT_FAILED
+
+    wt_file = args.in_dir / "wt.json"
+    if wt_file.is_file() and "edits" in raw_data:
+        try:
+            _, wt_data = read_artifact(wt_file)
+            wt_root = Path(wt_data.get("path", "."))
+            for edit in raw_data.get("edits", []):
+                target_p = wt_root / edit["path"]
+                target_p.parent.mkdir(parents=True, exist_ok=True)
+                target_p.write_text(edit["content"], encoding="utf-8")
+        except Exception:
+            pass
 
     payload = raw_data.get("payload", raw_data)
 

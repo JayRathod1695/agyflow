@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-import json
+import json, shutil, time
 from pathlib import Path
-import shutil
-import time
 from typing import Any
 
 from agyflow.engine.expr import eval_expr
@@ -16,17 +14,11 @@ from agyflow.engine import policy, registry, store
 from agyflow.engine.pipeline import PipelineNode, substitute_variables
 from agyflow.engine.state import RunState, append_event, save_state
 
-
 class Pause(Exception):
-    def __init__(self, kind: str, xid: str = "", reason: str = "") -> None:
-        super().__init__(f"Pause({kind}, {xid}, {reason})"); self.kind, self.xid, self.reason = kind, xid, reason
-
+    def __init__(self, kind: str, xid: str = "", reason: str = "") -> None: super().__init__(f"Pause({kind}, {xid}, {reason})"); self.kind, self.xid, self.reason = kind, xid, reason
 class Stop(Exception):
-    def __init__(self, kind: str, reason: str = "") -> None:
-        super().__init__(f"Stop({kind}, {reason})"); self.kind, self.reason = kind, reason
-
+    def __init__(self, kind: str, reason: str = "") -> None: super().__init__(f"Stop({kind}, {reason})"); self.kind, self.reason = kind, reason
 class StepFailed(Exception): pass
-
 
 @dataclass
 class Scope:
@@ -44,22 +36,25 @@ class Scope:
 
     def child(self, loop: str = "", iter: int = 0, item: str = "", as_var: str = "", exports: dict[str, Any] | None = None) -> Scope:
         lpath = f"{self.loop_path}/{loop}.{iter}" if (self.loop_path and loop) else (f"{loop}.{iter}" if loop else self.loop_path)
-        return Scope(self.run_dir, self.state, self.project_cfg, self.params,
-                     loop or self.loop_id, iter or self.loop_iter, lpath, item or self.item_id,
-                     as_var or self.as_name, bool(item) or self.in_foreach, exports if exports is not None else self.exports)
-
+        return Scope(self.run_dir, self.state, self.project_cfg, self.params, loop or self.loop_id, iter or self.loop_iter,
+                     lpath, item or self.item_id, as_var or self.as_name, bool(item) or self.in_foreach, exports if exports is not None else self.exports)
     def exec_id(self, step_id: str) -> str:
         pfx = f"{self.loop_path}/" if self.loop_path else ""
         return f"{pfx}item.{self.item_id}/{step_id}" if self.item_id else f"{pfx}{step_id}"
 
     def lookup_dict(self) -> dict[str, Any]:
-        d = {k: v for s in ("project", "limits", "budget") for k, v in self.project_cfg.get(s, {}).items()} | self.params | {f"params.{k}": v for k, v in self.params.items()}
-        d["loop.iter"], d["item.id"] = self.loop_iter, self.item_id
-        if self.as_name and self.item_id: d[self.as_name] = self.item_id
-        return d
+        cfg_items = {k: v for s in ("project", "limits", "budget") for k, v in self.project_cfg.get(s, {}).items()}
+        d = cfg_items | {f"{s}.{k}": v for s in ("project", "limits", "budget") for k, v in self.project_cfg.get(s, {}).items()} | self.params | {f"params.{k}": v for k, v in self.params.items()}
+        for k in ("metric_cmd", "extra_cmd", "holdout_dir"): d.setdefault(f"project.{k}", ""); d.setdefault(k, "")
+        d["loop.iter"], d["item.id"] = self.loop_iter, self.item_id; (d.__setitem__(self.as_name, self.item_id) if self.as_name and self.item_id else None); return d
 
     def resolve_ref_path(self, ref: str) -> Path | None:
         for opt in [r.strip().lstrip("$") for r in ref.split("||")]:
+            if self.item_id and (opt in (self.as_name, "item") or opt.endswith(f"_{self.as_name}") or opt.endswith("_item")):
+                idir = self.run_dir / "steps" / (f"{self.loop_path}/item.{self.item_id}" if self.loop_path else f"item.{self.item_id}")
+                idir.mkdir(parents=True, exist_ok=True); ifile = idir / "item.json"
+                if not ifile.is_file(): ifile.write_text(json.dumps({"schema_version": "1.0", "artifact_type": "item", "step": "foreach", "block": "foreach", "payload": {"id": self.item_id, "value": self.item_id}}), encoding="utf-8")
+                return ifile
             if opt in self.exports:
                 exp = self.exports[opt]
                 if isinstance(exp, Path) and exp.exists(): return exp
@@ -81,10 +76,19 @@ class Scope:
                     if (c := prev_d / sub / "out" / fname).is_file(): return c
                 continue
             sname, _, art = opt.partition(".")
-            fname = art if art.endswith(".json") else f"{art}.json"
-            if self.loop_path and (c := self.run_dir / "steps" / self.loop_path / sname / "out" / fname).is_file(): return c
-            if "/" in self.loop_path and (c := self.run_dir / "steps" / self.loop_path.rsplit("/", 1)[0] / sname / "out" / fname).is_file(): return c
-            if (c := self.run_dir / "steps" / sname / "out" / fname).is_file(): return c
+            fnames = [art if art.endswith(".json") else f"{art}.json", f"{art}.patch", art] if art else [""]
+            names = [sname, sname.partition("_")[2]] if "_" in sname else [sname]
+            pi = f"{self.loop_path}/item.{self.item_id}" if (self.loop_path and self.item_id) else (f"item.{self.item_id}" if self.item_id else "")
+            sdirs = [self.run_dir / "steps" / (f"{p}/{n}" if p else n) / "out" for n in names for p in ([pi] if pi else []) + ([self.loop_path] if self.loop_path else []) + ([self.loop_path.rsplit("/", 1)[0]] if "/" in self.loop_path else []) + [""]]
+            for d in sdirs:
+                for fn in fnames:
+                    if fn and (c := d / fn).is_file(): return c
+                if art == "picked" and d.is_dir():
+                    pts = list(d.glob("*.patch"))
+                    if pts: return pts[0]
+                    for f in sorted(d.iterdir()):
+                        if f.is_file() and not f.name.startswith("_"): return f
+                if not art and d.is_dir(): return d
         return None
 
     def resolve_ref_value(self, ref_path: str) -> Any:
@@ -107,13 +111,14 @@ def exec_step(step_node: PipelineNode, scope: Scope, launcher: Launcher) -> None
     except policy.BudgetExceededError as e: raise Stop("stopped_budget", str(e))
     if step_node.data.get("when") and not eval_expr(step_node.data["when"], scope):
         scope.state.mark_skipped(xid); return
-    block = registry.resolve_block(step_node.data["block"], scope.project_cfg, scope.run_dir.parent.parent)
+    repo_p = scope.run_dir.parent.parent.parent if scope.run_dir.parent.name == "runs" else scope.run_dir.parent.parent
+    block = registry.resolve_block(step_node.data["block"], scope.project_cfg, repo_p)
     inputs: dict[str, Path] = {}
     for in_name, in_ref in step_node.data.get("in", {}).items():
         if (p := scope.resolve_ref_path(in_ref)): inputs[in_name] = p
-        elif not block.inputs.get(in_name, {}).get("optional", False): raise StepFailed(f"Step {xid} missing {in_name}")
+        elif not block.inputs.get(in_name, {}).get("optional", False) and not block.dynamic_inputs: raise StepFailed(f"Step {xid} missing {in_name}")
 
-    cfg = substitute_variables(step_node.data.get("cfg", {}), scope.lookup_dict())
+    cfg = substitute_variables(step_node.data.get("cfg", {}), scope.lookup_dict()) | ({"out": step_node.data["out"]} if "out" in step_node.data else {})
     ih = store.inputs_hash(f"{block.name}@{block.version}", cfg, inputs)
     rec = scope.state.steps.get(xid)
     if rec and rec.status == "committed" and rec.inputs_hash == ih: return
@@ -133,15 +138,13 @@ def exec_step(step_node: PipelineNode, scope: Scope, launcher: Launcher) -> None
         att = store.new_attempt(scope.run_dir, xid, attempt)
         store.stage_inputs(att.in_dir, inputs, retry_info)
         if (app := scope.run_dir / "gates" / f"{step_node.id}.approval.json").is_file(): shutil.copy2(app, att.in_dir / "_gate_response.json")
-        store.write_cfg(att.cfg_file, cfg | {"_ctx": {"run_id": scope.state.run_id, "step": xid, "attempt": attempt}})
-        res = launcher.run(list(block.command) + ["--in", str(att.in_dir), "--out", str(att.out_dir), "--cfg", str(att.cfg_file)],
-                           cwd=block.dir, stdout_log=att.stdout_log, stderr_log=att.stderr_log)
+        store.write_cfg(att.cfg_file, cfg | {"_ctx": {"run_id": scope.state.run_id, "step": xid, "attempt": attempt, "item_id": scope.item_id, "repo": str(repo_p.resolve()), "flow_dir": str((repo_p / ".flow").resolve())}})
+        res = launcher.run(list(block.command) + ["--in", str(att.in_dir), "--out", str(att.out_dir), "--cfg", str(att.cfg_file)], cwd=block.dir, stdout_log=att.stdout_log, stderr_log=att.stderr_log)
         v = store.interpret_attempt(res, att, block)
         scope.state.add_metrics(v.get("metrics"))
 
         if v.get("needs_human"):
-            sub_h = store.stage_gate(scope.run_dir, step_node.id, att.out_dir)
-            scope.state.pending = {"gate": step_node.id, "subject_hash": sub_h}
+            scope.state.pending = {"gate": step_node.id, "subject_hash": store.stage_gate(scope.run_dir, step_node.id, att.out_dir)}
             raise Pause("paused_gate", xid, v.get("reason", ""))
         if v["ok"]:
             store.commit_attempt(scope.run_dir, xid, att)
@@ -159,8 +162,7 @@ def exec_step(step_node: PipelineNode, scope: Scope, launcher: Launcher) -> None
 
 def exec_seq(nodes: list[PipelineNode], scope: Scope, launcher: Launcher) -> None:
     for node in nodes:
-        if node.kind == "step":
-            exec_step(node, scope, launcher)
+        if node.kind == "step": exec_step(node, scope, launcher)
         elif node.kind == "loop":
             if node.data.get("when") and not eval_expr(node.data["when"], scope): continue
             max_r = int(substitute_variables(node.data.get("max", 1), scope.lookup_dict()))
@@ -190,9 +192,7 @@ def exec_seq(nodes: list[PipelineNode], scope: Scope, launcher: Launcher) -> Non
 
             if workers > 1:
                 with ThreadPoolExecutor(max_workers=workers) as pool: item_statuses = list(pool.map(_run_one, items))
-            else:
-                item_statuses = [_run_one(it) for it in items]
-
+            else: item_statuses = [_run_one(it) for it in items]
             idx_dir = scope.run_dir / "steps" / node.id / "out"; idx_dir.mkdir(parents=True, exist_ok=True)
             (idx_dir / "index.json").write_text(json.dumps({"payload": {"items": item_statuses}}))
             scope.exports[f"{node.id}.index"] = idx_dir / "index.json"

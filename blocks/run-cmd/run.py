@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shlex
 import shutil
 import sys
 from typing import Any
@@ -33,10 +34,7 @@ def main() -> int:
     cwd = (base_cwd / cwd_rel).resolve() if cwd_rel else base_cwd
 
     raw_cmd = args.cfg.get("cmd", [])
-    if isinstance(raw_cmd, str):
-        cmd = [raw_cmd]
-    else:
-        cmd = list(raw_cmd)
+    cmd = shlex.split(raw_cmd) if isinstance(raw_cmd, str) else list(raw_cmd)
 
     if not cmd:
         write_status(args.out_dir, "failed", E_INPUT, "cfg.cmd is empty", complete=False)

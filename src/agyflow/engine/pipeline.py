@@ -54,11 +54,10 @@ def substitute_variables(val: Any, scope_lookup: dict[str, Any]) -> Any:
 def _rewrite_refs(data: Any, prefix: str, declared_inputs: dict[str, str]) -> Any:
     """Rewrite step references inside included subtrees with prefix, mapping with-inputs."""
     if isinstance(data, str):
-        s = data
+        s = re.sub(r"\$(?!(?:project|prev|loop|item)\.)([a-zA-Z0-9_]+)", rf"${prefix}_\1", data)
         for inp_name, mapped_ref in declared_inputs.items():
-            s = s.replace(f"${inp_name}", mapped_ref)
-        # Prefix step refs like $step.art -> $prefix_step.art, exempting builtins ($project, $prev, $loop, $item)
-        return re.sub(r"\$(?!(?:project|prev|loop|item)\.)([a-zA-Z0-9_]+)", rf"${prefix}_\1", s)
+            s = s.replace(f"${prefix}_{inp_name}", mapped_ref).replace(f"${inp_name}", mapped_ref)
+        return s
     if isinstance(data, dict):
         return {k: _rewrite_refs(v, prefix, declared_inputs) for k, v in data.items()}
     if isinstance(data, list):
@@ -94,8 +93,10 @@ def _expand_nodes(
             for exp_name, exp_ref in inc_yaml.get("exports", {}).items():
                 collected_exports[f"{alias}.{exp_name}"] = _rewrite_refs(exp_ref, alias, with_map)
 
-            rewritten_steps = _rewrite_refs(inc_yaml.get("steps", []), alias, with_map)
-            expanded_inner = _expand_nodes(rewritten_steps, repo_root, collected_exports, depth + 1, seen | {inc_name})
+            inc_params = {k: v for k, v in inc_yaml.get("params", {}).items()} | {f"params.{k}": v for k, v in inc_yaml.get("params", {}).items()}
+            raw_inc_steps = substitute_variables(inc_yaml.get("steps", []), inc_params)
+            rewritten_steps = _rewrite_refs(raw_inc_steps, alias, with_map)
+            expanded_inner = _expand_nodes(rewritten_steps, repo_root, collected_exports, depth, seen | {inc_name})
             for n in expanded_inner:
                 n.id = f"{alias}_{n.id}"
                 result.append(n)
