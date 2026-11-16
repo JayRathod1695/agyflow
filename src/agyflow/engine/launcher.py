@@ -70,8 +70,7 @@ class HerdrLauncher:
     def run(self, cmd: list[str], cwd: Path | str, env: dict[str, str] | None = None,
             stdout_log: Path | str | None = None, stderr_log: Path | str | None = None, timeout_s: float = 900.0) -> LaunchResult:
         herdr_bin = shutil.which("herdr")
-        if not herdr_bin:
-            sys.stderr.write("Warning: herdr binary not found in PATH; falling back to subprocess launcher\n")
+        if not herdr_bin or not os.environ.get("HERDR_ENV"):
             return self._fallback.run(cmd, cwd, env, stdout_log, stderr_log, timeout_s)
 
         exec_cmd, run_env = _prepare_exec(cmd, env)
@@ -86,18 +85,38 @@ class HerdrLauncher:
         wrapped_sh = f"{cmd_str} > {shlex.quote(str(out_path))} 2> {shlex.quote(str(err_path))} ; echo $? > {shlex.quote(str(exit_file))}"
 
         t0 = time.time()
-        pane_res = run_command([herdr_bin, "run", "--", "sh", "-c", wrapped_sh], cwd=cwd, env=run_env, timeout_s=timeout_s)
+        # 1. Split a background pane quietly without stealing focus
+        split_res = run_command([herdr_bin, "pane", "split", "--current", "--direction", "right", "--cwd", str(cwd), "--no-focus"], cwd=cwd, env=run_env, timeout_s=15.0)
+        pane_id = None
+        if split_res.returncode == 0:
+            try:
+                pane_id = json.loads(split_res.stdout).get("result", {}).get("pane", {}).get("pane_id")
+            except Exception:
+                pane_id = None
 
-        deadline = time.time() + timeout_s; timed_out = False
-        while not exit_file.is_file():
-            if time.time() > deadline: timed_out = True; break
-            time.sleep(0.1)
+        if not pane_id:
+            # Fallback cleanly to subprocess if pane creation fails
+            return self._fallback.run(cmd, cwd, env, stdout_log, stderr_log, timeout_s)
 
-        dur = time.time() - t0
-        exit_code = 124 if timed_out else (int(exit_file.read_text().strip()) if exit_file.is_file() else (pane_res.returncode or 1))
-        out_txt = out_path.read_text(encoding="utf-8") if out_path.is_file() else pane_res.stdout
-        err_txt = err_path.read_text(encoding="utf-8") if err_path.is_file() else pane_res.stderr
-        return LaunchResult(exit_code, dur, timed_out, out_txt, err_txt)
+        try:
+            # 2. Run the command in the dedicated pane
+            time.sleep(0.2)
+            run_command([herdr_bin, "pane", "run", pane_id, wrapped_sh], cwd=cwd, env=run_env, timeout_s=15.0)
+
+            # 3. Wait for execution completion via exitcode file
+            deadline = time.time() + timeout_s; timed_out = False
+            while not exit_file.is_file():
+                if time.time() > deadline: timed_out = True; break
+                time.sleep(0.1)
+
+            dur = time.time() - t0
+            exit_code = 124 if timed_out else (int(exit_file.read_text().strip()) if exit_file.is_file() else 1)
+            out_txt = out_path.read_text(encoding="utf-8") if out_path.is_file() else ""
+            err_txt = err_path.read_text(encoding="utf-8") if err_path.is_file() else ""
+            return LaunchResult(exit_code, dur, timed_out, out_txt, err_txt)
+        finally:
+            # 4. Always close and prune the background pane
+            run_command([herdr_bin, "pane", "close", pane_id], cwd=cwd, timeout_s=10.0)
 
     @property
     def capabilities(self) -> dict[str, bool]: return {"stream_guard": True, "herdr": bool(shutil.which("herdr"))}
